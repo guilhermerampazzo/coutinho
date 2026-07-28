@@ -10,8 +10,11 @@
 #
 # Tudo fica concentrado em um único domínio (https://{$DOMAIN}), roteado por caminho:
 #   /            -> landing (site institucional)
-#   /app/*       -> web (área do cliente)
-#   /admin/*     -> web (painel administrativo)
+#   /app, /app/*     -> web (área do cliente)
+#   /admin, /admin/* -> web (painel administrativo)
+# Atenção: `path /app/*` NÃO casa com a URL sem barra `/app` — as duas formas precisam
+# estar listadas, senão acessar/recarregar couthealth.com.br/app (ou /admin) cai na
+# landing e devolve 404.
 #   /entrar, /criar-conta, /planos, /checkout, /anamnese, /auth/callback -> web (auth/onboarding)
 #   /assets/*    -> web (bundle estático do Vite)
 #   /api/*       -> api (prefixo /api removido antes de repassar)
@@ -20,7 +23,7 @@ http://{$DOMAIN:localhost} {
 		reverse_proxy api:3000
 	}
 
-	@web path /app/* /admin/* /assets/* /entrar /criar-conta /planos /checkout /anamnese /auth/callback
+	@web path /app /app/* /admin /admin/* /assets/* /entrar /criar-conta /planos /checkout /anamnese /auth/callback
 	handle @web {
 		reverse_proxy web:80
 	}
