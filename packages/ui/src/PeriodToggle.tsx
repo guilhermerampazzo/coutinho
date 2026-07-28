@@ -30,6 +30,11 @@ export function PeriodToggle({ value, onChange }: PeriodToggleProps) {
       aria-label="Período de assinatura"
       style={{
         display: "inline-flex",
+        // Quebra em 2 linhas no mobile: os 4 períodos não cabem em ~340px e, sem wrap,
+        // empurravam a página inteira para fora da tela (scroll horizontal no celular).
+        flexWrap: "wrap",
+        justifyContent: "center",
+        maxWidth: "100%",
         padding: 4,
         borderRadius: "var(--r-full)",
         background: "var(--bg-surface)",
@@ -47,7 +52,7 @@ export function PeriodToggle({ value, onChange }: PeriodToggleProps) {
             aria-selected={active}
             onClick={() => onChange(period)}
             style={{
-              padding: "8px 16px",
+              padding: "8px 14px",
               borderRadius: "var(--r-full)",
               border: "none",
               cursor: "pointer",

@@ -85,11 +85,27 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Rede de segurança mobile: impede que um único elemento largo (tabela, seletor,
+     URL longa) empurre a página inteira e gere scroll horizontal no celular.
+     Não substitui conter o overflow no próprio componente — ver .admin-table-wrap
+     no AdminLayout e o flex-wrap do PeriodToggle. */
+  overflow-x: hidden;
+}
+
 body {
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-body);
   margin: 0;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
 }
 
 h1, h2, h3, .display {

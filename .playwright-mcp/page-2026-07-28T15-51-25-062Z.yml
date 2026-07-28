@@ -1,0 +1,18 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - heading "Bem-vindo(a) à CoutHealth" [level=1] [ref=e5]
+    - paragraph [ref=e6]: Escolha um plano para iniciar seu acompanhamento contínuo. Quanto maior o período, maior o desconto.
+    - tablist "Período de assinatura" [ref=e7]:
+      - tab "Mensal" [selected] [ref=e8] [cursor=pointer]
+      - tab "Trimestral-8%" [ref=e9] [cursor=pointer]:
+        - text: Trimestral
+        - generic [ref=e10]: "-8%"
+      - tab "Semestral-15%" [ref=e11] [cursor=pointer]:
+        - text: Semestral
+        - generic [ref=e12]: "-15%"
+      - tab "Anual-25%" [ref=e13] [cursor=pointer]:
+        - text: Anual
+        - generic [ref=e14]: "-25%"
+    - generic [ref=e17]:
+      - generic [ref=e18]: Cupom (opcional)
+      - textbox "Cupom (opcional)" [ref=e19]
