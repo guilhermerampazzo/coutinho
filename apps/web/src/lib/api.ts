@@ -30,6 +30,7 @@ export interface AuthUser {
   role: "CLIENT" | "PROFESSIONAL";
   hasActiveSubscription: boolean;
   activePlanName?: string;
+  hadSubscription: boolean;
 }
 
 export interface AuthResponse {

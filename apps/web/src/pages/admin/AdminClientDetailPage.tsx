@@ -244,7 +244,7 @@ export function AdminClientDetailPage() {
         </span>
       }
     >
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.3fr", gap: "var(--sp-6)", alignItems: "start" }}>
+      <div className="admin-split-2" style={{ display: "grid", gridTemplateColumns: "1fr 1.3fr", gap: "var(--sp-6)", alignItems: "start" }}>
         <Card>
           <h3 style={{ marginTop: 0 }}>Anamnese</h3>
           <AnamnesisSummary anamnesis={client.anamnesis ?? {}} />

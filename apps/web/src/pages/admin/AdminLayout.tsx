@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { ContinuityRing } from "@couthealth/ui";
 
@@ -21,13 +21,40 @@ export function AdminLayout({
   title?: ReactNode;
   actions?: ReactNode;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
     <div style={{ minHeight: "100vh", display: "flex", background: "var(--bg-base)" }}>
       <style>{`
         .admin-navitem { transition: background var(--motion-fast), color var(--motion-fast); }
         .admin-navitem:hover { background: var(--nav-hover); }
+        .admin-mobile-bar, .admin-mobile-overlay { display: none; }
+        /* Utilitários reaproveitados pelas páginas admin (grids/tabelas) — ver DECISIONS.md
+           responsividade mobile: em vez de redesenhar cada tela, tabelas ganham scroll
+           horizontal contido e painéis lado-a-lado empilham em 1 coluna. */
+        .admin-table-wrap { overflow-x: auto; }
+        @media (max-width: 860px) {
+          .admin-sidebar {
+            position: fixed; inset: 0 auto 0 0; z-index: 50; height: 100vh;
+            transform: translateX(-100%); transition: transform var(--motion-fast, 0.2s ease);
+          }
+          .admin-sidebar.open { transform: translateX(0); box-shadow: var(--elev, 0 8px 24px rgba(0,0,0,0.4)); }
+          .admin-mobile-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            height: 56px; flex-shrink: 0; padding: 0 var(--sp-4);
+            border-bottom: 1px solid var(--border-hairline);
+          }
+          .admin-mobile-overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; }
+          .admin-header { padding: 0 var(--sp-4) !important; flex-wrap: wrap; height: auto !important; padding-top: var(--sp-3) !important; padding-bottom: var(--sp-3) !important; }
+          .admin-main { padding: var(--sp-4) !important; }
+          .admin-split-2 { grid-template-columns: 1fr !important; }
+        }
       `}</style>
+
+      {menuOpen && <div className="admin-mobile-overlay" onClick={() => setMenuOpen(false)} />}
+
       <aside
+        className={`admin-sidebar${menuOpen ? " open" : ""}`}
         style={{
           width: "var(--sidebar-w)",
           flexShrink: 0,
@@ -55,6 +82,7 @@ export function AdminLayout({
               to={link.to}
               end={link.end}
               className="admin-navitem"
+              onClick={() => setMenuOpen(false)}
               style={({ isActive }) => ({
                 display: "flex",
                 alignItems: "center",
@@ -73,8 +101,22 @@ export function AdminLayout({
         </nav>
       </aside>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <div className="admin-mobile-bar">
+          <button
+            aria-label="Abrir menu"
+            onClick={() => setMenuOpen(true)}
+            style={{ background: "none", border: 0, color: "var(--text-primary)", fontSize: "1.5rem", lineHeight: 1, cursor: "pointer", padding: 4 }}
+          >
+            ☰
+          </button>
+          <span className="display" style={{ fontWeight: 700, fontSize: "0.9375rem", color: "var(--accent)" }}>
+            CoutHealth Admin
+          </span>
+          <span style={{ width: 24 }} />
+        </div>
         {title && (
           <header
+            className="admin-header"
             style={{
               height: "var(--header-h)",
               flexShrink: 0,
@@ -89,10 +131,12 @@ export function AdminLayout({
             <h1 className="display" style={{ fontSize: "var(--fs-title-lg)", margin: 0 }}>
               {title}
             </h1>
-            {actions && <div style={{ display: "flex", gap: "var(--sp-3)", alignItems: "center" }}>{actions}</div>}
+            {actions && <div style={{ display: "flex", gap: "var(--sp-3)", alignItems: "center", flexWrap: "wrap" }}>{actions}</div>}
           </header>
         )}
-        <main style={{ flex: 1, padding: "var(--sp-8)", overflow: "auto" }}>{children}</main>
+        <main className="admin-main" style={{ flex: 1, padding: "var(--sp-8)", overflow: "auto" }}>
+          {children}
+        </main>
       </div>
     </div>
   );

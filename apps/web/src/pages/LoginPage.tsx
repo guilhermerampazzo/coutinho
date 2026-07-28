@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { Button, TextField } from "@couthealth/ui";
+import { Button, GoogleIcon, TextField } from "@couthealth/ui";
 import { authApi, ApiError, API_URL } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { postAuthPath } from "../lib/redirect";
+import { resolveRedirectTarget, savePostAuthRedirect, consumePostAuthRedirect } from "../lib/redirect";
 import { AuthLayout } from "./AuthLayout";
 
 export function LoginPage() {
@@ -22,7 +22,7 @@ export function LoginPage() {
     try {
       const res = await authApi.login({ email, password });
       setSession(res.user, res.tokens.accessToken, res.tokens.refreshToken);
-      navigate(postAuthPath(location.search, res.user.role));
+      navigate(consumePostAuthRedirect() ?? resolveRedirectTarget(location.search, res.user.role));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível entrar. Tente novamente.");
     } finally {
@@ -52,7 +52,13 @@ export function LoginPage() {
           ou
           <div style={{ flex: 1, height: 1, background: "var(--border-hairline)" }} />
         </div>
-        <Button variant="secondary" href={`${API_URL}/auth/google`} style={{ height: 48, justifyContent: "center" }}>
+        <Button
+          variant="secondary"
+          href={`${API_URL}/auth/google`}
+          onClick={() => savePostAuthRedirect(resolveRedirectTarget(location.search))}
+          style={{ height: 48, justifyContent: "center", gap: 10 }}
+        >
+          <GoogleIcon />
           Continuar com Google
         </Button>
       </form>

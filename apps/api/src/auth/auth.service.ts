@@ -25,11 +25,14 @@ export class AuthService {
 
   /** Assinatura ativa só existe depois do pagamento aprovado (ver PaymentsService.checkout). */
   private async publicUser(user: { id: string; email: string; name: string; role: Role }) {
-    const activeSubscription = await this.prisma.subscription.findFirst({
-      where: { userId: user.id, status: "ACTIVE" },
-      include: { plan: true },
-      orderBy: { createdAt: "desc" },
-    });
+    const [activeSubscription, anySubscription] = await Promise.all([
+      this.prisma.subscription.findFirst({
+        where: { userId: user.id, status: "ACTIVE" },
+        include: { plan: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      this.prisma.subscription.findFirst({ where: { userId: user.id } }),
+    ]);
     return {
       id: user.id,
       email: user.email,
@@ -37,6 +40,8 @@ export class AuthService {
       role: user.role,
       hasActiveSubscription: Boolean(activeSubscription),
       activePlanName: activeSubscription?.plan.name,
+      // Distingue "nunca assinou" (tela de boas-vindas) de "assinou e expirou/cancelou" (tela de renovação).
+      hadSubscription: Boolean(anySubscription),
     };
   }
 

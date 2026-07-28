@@ -39,52 +39,54 @@ export function AdminDashboardPage() {
       {loading ? (
         <p style={{ color: "var(--text-secondary)" }}>Carregando…</p>
       ) : (
-        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-lg)", overflow: "hidden" }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1.4fr 1.2fr 1fr auto",
-              alignItems: "center",
-              gap: "var(--sp-3)",
-              padding: "14px var(--sp-6)",
-              background: "var(--bg-base)",
-              fontSize: "var(--fs-caption)",
-              color: "var(--text-tertiary)",
-              fontWeight: 500,
-            }}
-          >
-            <span>Cliente</span>
-            <span>E-mail</span>
-            <span>Status</span>
-            <span />
+        <div className="admin-table-wrap" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-lg)" }}>
+          <div style={{ minWidth: 640 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.4fr 1.2fr 1fr auto",
+                alignItems: "center",
+                gap: "var(--sp-3)",
+                padding: "14px var(--sp-6)",
+                background: "var(--bg-base)",
+                fontSize: "var(--fs-caption)",
+                color: "var(--text-tertiary)",
+                fontWeight: 500,
+              }}
+            >
+              <span>Cliente</span>
+              <span>E-mail</span>
+              <span>Status</span>
+              <span />
+            </div>
+            {clients.map((client) => {
+              const status = statusLabel[client.anamnesis?.status ?? "RASCUNHO"];
+              return (
+                <Link
+                  key={client.id}
+                  to={`/admin/clientes/${client.id}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1.4fr 1.2fr 1fr auto",
+                    alignItems: "center",
+                    gap: "var(--sp-3)",
+                    padding: "14px var(--sp-6)",
+                    borderTop: "1px solid var(--border-hairline)",
+                    textDecoration: "none",
+                    color: "inherit",
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>{client.name}</span>
+                  <span style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)" }}>{client.email}</span>
+                  <span style={{ display: "flex", gap: "var(--sp-2)", flexWrap: "wrap" }}>
+                    <Badge tone={status.tone}>{status.label}</Badge>
+                    {client.subscriptions[0] && <Badge>{client.subscriptions[0].plan.name}</Badge>}
+                  </span>
+                  <span style={{ color: "var(--accent)", fontWeight: 600, fontSize: "var(--fs-caption)" }}>Ver →</span>
+                </Link>
+              );
+            })}
           </div>
-          {clients.map((client) => {
-            const status = statusLabel[client.anamnesis?.status ?? "RASCUNHO"];
-            return (
-              <Link
-                key={client.id}
-                to={`/admin/clientes/${client.id}`}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1.4fr 1.2fr 1fr auto",
-                  alignItems: "center",
-                  gap: "var(--sp-3)",
-                  padding: "14px var(--sp-6)",
-                  borderTop: "1px solid var(--border-hairline)",
-                  textDecoration: "none",
-                  color: "inherit",
-                }}
-              >
-                <span style={{ fontWeight: 600 }}>{client.name}</span>
-                <span style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)" }}>{client.email}</span>
-                <span style={{ display: "flex", gap: "var(--sp-2)", flexWrap: "wrap" }}>
-                  <Badge tone={status.tone}>{status.label}</Badge>
-                  {client.subscriptions[0] && <Badge>{client.subscriptions[0].plan.name}</Badge>}
-                </span>
-                <span style={{ color: "var(--accent)", fontWeight: 600, fontSize: "var(--fs-caption)" }}>Ver →</span>
-              </Link>
-            );
-          })}
         </div>
       )}
     </AdminLayout>

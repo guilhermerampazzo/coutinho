@@ -66,12 +66,15 @@ export function PlansPage() {
   }
 
   const preselected = params.get("plano");
-  const inactive = params.get("motivo") === "inativo";
+  // "inativo": já teve assinatura e ela expirou/foi cancelada — tela de renovação.
+  // qualquer outro caso (visitante novo, ou "?motivo=novo" vindo do ProtectedRoute): boas-vindas.
+  const renewing = params.get("motivo") === "inativo";
+  const ctaLabel = renewing ? "Renovar plano" : "Iniciar plano";
 
   return (
     <main style={{ minHeight: "100vh", padding: "var(--sp-16) var(--sp-6)", display: "flex", flexDirection: "column", gap: "var(--sp-8)" }}>
       <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--sp-4)" }}>
-        {inactive && (
+        {renewing && (
           <div
             style={{
               background: "var(--danger-bg, #3a1a1a)",
@@ -83,13 +86,15 @@ export function PlansPage() {
               maxWidth: 480,
             }}
           >
-            Sua assinatura está inativa ou expirada. Escolha um plano para liberar novamente sua conta.
+            Sua assinatura está inativa ou expirada. Renove um plano para liberar novamente sua conta.
           </div>
         )}
         <h1 className="display" style={{ fontSize: "var(--fs-display-sm)", margin: 0 }}>
-          Escolha seu plano
+          {renewing ? "Renove seu plano" : "Bem-vindo(a) à CoutHealth"}
         </h1>
-        <p style={{ color: "var(--text-secondary)", maxWidth: 480 }}>Quanto maior o período, maior o desconto.</p>
+        <p style={{ color: "var(--text-secondary)", maxWidth: 480 }}>
+          {renewing ? "Quanto maior o período, maior o desconto." : "Escolha um plano para iniciar seu acompanhamento contínuo. Quanto maior o período, maior o desconto."}
+        </p>
         <PeriodToggle value={period} onChange={setPeriod} />
         <div style={{ display: "flex", gap: "var(--sp-2)", alignItems: "flex-end", maxWidth: 320, width: "100%" }}>
           <div style={{ flex: 1 }}>
@@ -122,7 +127,7 @@ export function PlansPage() {
             originalPriceLabel={period !== "mensal" ? `${formatPrice(plan.monthlyPrice, "mensal")}/mês` : undefined}
             features={plan.features}
             highlighted={plan.code === "PLUS" || plan.code.toLowerCase() === preselected}
-            ctaLabel="Continuar"
+            ctaLabel={ctaLabel}
             onSelect={() => selectPlan(plan.code)}
           />
         ))}

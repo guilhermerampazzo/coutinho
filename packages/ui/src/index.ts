@@ -5,6 +5,7 @@ export * from "./Badge";
 export * from "./Accordion";
 export * from "./PeriodToggle";
 export * from "./PlanCard";
+export * from "./GoogleIcon";
 export * from "./TextField";
 export * from "./LineChart";
 export * from "./tokens";

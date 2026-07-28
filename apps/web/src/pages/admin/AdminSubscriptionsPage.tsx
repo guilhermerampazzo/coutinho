@@ -39,7 +39,8 @@ export function AdminSubscriptionsPage() {
 
   return (
     <AdminLayout title="Planos & Assinaturas">
-      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-lg)", overflow: "hidden" }}>
+      <div className="admin-table-wrap" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-lg)" }}>
+        <div style={{ minWidth: 640 }}>
         <div
           style={{
             display: "grid",
@@ -103,6 +104,7 @@ export function AdminSubscriptionsPage() {
             </span>
           </div>
         ))}
+        </div>
       </div>
     </AdminLayout>
   );

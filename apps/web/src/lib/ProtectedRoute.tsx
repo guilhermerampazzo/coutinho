@@ -19,7 +19,10 @@ export function ProtectedRoute({
   if (!user) return <Navigate to={`/entrar?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   if (role && user.role !== role) return <Navigate to="/app" replace />;
   if (requireSubscription && user.role === "CLIENT" && !user.hasActiveSubscription) {
-    return <Navigate to="/planos?motivo=inativo" replace />;
+    // Quem já teve alguma assinatura (expirou/cancelou) vê a tela de renovação; quem nunca
+    // assinou (ex.: conta criada mas contratação não concluída) vê a tela de boas-vindas.
+    const motivo = user.hadSubscription ? "inativo" : "novo";
+    return <Navigate to={`/planos?motivo=${motivo}`} replace />;
   }
 
   return <>{children}</>;

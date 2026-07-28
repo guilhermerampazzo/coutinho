@@ -39,7 +39,7 @@ export function AdminNotificationsPage() {
 
   return (
     <AdminLayout title="Nova notificação">
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "var(--sp-8)", alignItems: "start" }}>
+      <div className="admin-split-2" style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "var(--sp-8)", alignItems: "start" }}>
         <Card style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)", maxWidth: 480 }}>
           <TextField label="Título" value={title} onChange={(e) => setTitle(e.target.value)} />
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { authApi } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { postAuthPath } from "../lib/redirect";
+import { postAuthPath, consumePostAuthRedirect } from "../lib/redirect";
 
 /** Destino do redirect do Google OAuth (?access=...&refresh=...), ver auth.controller.ts no backend. */
 export function AuthCallbackPage() {
@@ -22,7 +22,7 @@ export function AuthCallbackPage() {
       .me(access)
       .then((user) => {
         setSession(user, access, refresh);
-        navigate(postAuthPath("", user.role), { replace: true });
+        navigate(consumePostAuthRedirect() ?? postAuthPath("", user.role), { replace: true });
       })
       .catch(() => setError("Não foi possível concluir o login com Google."));
     // eslint-disable-next-line react-hooks/exhaustive-deps

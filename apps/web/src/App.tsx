@@ -53,22 +53,9 @@ export function App() {
       <Route path="/criar-conta" element={<RegisterPage />} />
       <Route path="/entrar" element={<LoginPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
-      <Route
-        path="/planos"
-        element={
-          <ProtectedRoute>
-            <PlansPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/checkout"
-        element={
-          <ProtectedRoute>
-            <CheckoutPage />
-          </ProtectedRoute>
-        }
-      />
+      {/* Públicas: escolha de plano e contratação acontecem antes do cadastro (Iniciar plano → Contratação → Cadastro). */}
+      <Route path="/planos" element={<PlansPage />} />
+      <Route path="/checkout" element={<CheckoutPage />} />
       <Route
         path="/anamnese"
         element={

@@ -54,48 +54,50 @@ export function AdminLibraryPage() {
         </Button>
       </Card>
 
-      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-lg)", overflow: "hidden" }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.6fr 1fr auto",
-            alignItems: "center",
-            gap: "var(--sp-3)",
-            padding: "12px var(--sp-4)",
-            background: "var(--bg-base)",
-            fontSize: "var(--fs-caption)",
-            color: "var(--text-tertiary)",
-            fontWeight: 500,
-          }}
-        >
-          <span>Título</span>
-          <span>Tipo</span>
-          <span>Status</span>
-        </div>
-        {items.map((item) => (
+      <div className="admin-table-wrap" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-lg)" }}>
+        <div style={{ minWidth: 480 }}>
           <div
-            key={item.id}
             style={{
               display: "grid",
               gridTemplateColumns: "1.6fr 1fr auto",
               alignItems: "center",
               gap: "var(--sp-3)",
               padding: "12px var(--sp-4)",
-              borderTop: "1px solid var(--border-hairline)",
-              fontSize: "var(--fs-body-sm)",
+              background: "var(--bg-base)",
+              fontSize: "var(--fs-caption)",
+              color: "var(--text-tertiary)",
+              fontWeight: 500,
             }}
           >
-            <span>{item.title}</span>
-            <span style={{ color: "var(--text-tertiary)" }}>{item.type}</span>
-            {item.publishedAt ? (
-              <Badge tone="accent">Publicado</Badge>
-            ) : (
-              <Button variant="secondary" onClick={() => publish(item.id)}>
-                Publicar
-              </Button>
-            )}
+            <span>Título</span>
+            <span>Tipo</span>
+            <span>Status</span>
           </div>
-        ))}
+          {items.map((item) => (
+            <div
+              key={item.id}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.6fr 1fr auto",
+                alignItems: "center",
+                gap: "var(--sp-3)",
+                padding: "12px var(--sp-4)",
+                borderTop: "1px solid var(--border-hairline)",
+                fontSize: "var(--fs-body-sm)",
+              }}
+            >
+              <span>{item.title}</span>
+              <span style={{ color: "var(--text-tertiary)" }}>{item.type}</span>
+              {item.publishedAt ? (
+                <Badge tone="accent">Publicado</Badge>
+              ) : (
+                <Button variant="secondary" onClick={() => publish(item.id)}>
+                  Publicar
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </AdminLayout>
   );

@@ -47,52 +47,54 @@ export function AdminFoodsPage() {
 
       <TextField label="Buscar" value={search} onChange={(e) => setSearch(e.target.value)} style={{ marginBottom: "var(--sp-4)", maxWidth: 320 }} />
 
-      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-lg)", overflow: "hidden" }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.6fr 1fr 0.7fr 0.7fr 0.7fr 0.7fr auto",
-            alignItems: "center",
-            gap: "var(--sp-3)",
-            padding: "12px var(--sp-4)",
-            background: "var(--bg-base)",
-            fontSize: "var(--fs-caption)",
-            color: "var(--text-tertiary)",
-            fontWeight: 500,
-          }}
-        >
-          <span>Nome</span>
-          <span>Categoria</span>
-          <span style={{ textAlign: "right" }}>Kcal</span>
-          <span style={{ textAlign: "right" }}>Prot.</span>
-          <span style={{ textAlign: "right" }}>Carb.</span>
-          <span style={{ textAlign: "right" }}>Gord.</span>
-          <span />
-        </div>
-        {foods.map((food) => (
+      <div className="admin-table-wrap" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-lg)" }}>
+        <div style={{ minWidth: 640 }}>
           <div
-            key={food.id}
             style={{
               display: "grid",
               gridTemplateColumns: "1.6fr 1fr 0.7fr 0.7fr 0.7fr 0.7fr auto",
               alignItems: "center",
               gap: "var(--sp-3)",
               padding: "12px var(--sp-4)",
-              borderTop: "1px solid var(--border-hairline)",
-              fontSize: "var(--fs-body-sm)",
+              background: "var(--bg-base)",
+              fontSize: "var(--fs-caption)",
+              color: "var(--text-tertiary)",
+              fontWeight: 500,
             }}
           >
-            <span>{food.name}</span>
-            <span style={{ color: "var(--text-tertiary)" }}>{food.category}</span>
-            <span style={{ textAlign: "right" }}>{food.kcal}</span>
-            <span style={{ textAlign: "right" }}>{food.protein}g</span>
-            <span style={{ textAlign: "right" }}>{food.carbs}g</span>
-            <span style={{ textAlign: "right" }}>{food.fat}g</span>
-            <Button variant="ghost" onClick={() => remove(food.id)}>
-              Remover
-            </Button>
+            <span>Nome</span>
+            <span>Categoria</span>
+            <span style={{ textAlign: "right" }}>Kcal</span>
+            <span style={{ textAlign: "right" }}>Prot.</span>
+            <span style={{ textAlign: "right" }}>Carb.</span>
+            <span style={{ textAlign: "right" }}>Gord.</span>
+            <span />
           </div>
-        ))}
+          {foods.map((food) => (
+            <div
+              key={food.id}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.6fr 1fr 0.7fr 0.7fr 0.7fr 0.7fr auto",
+                alignItems: "center",
+                gap: "var(--sp-3)",
+                padding: "12px var(--sp-4)",
+                borderTop: "1px solid var(--border-hairline)",
+                fontSize: "var(--fs-body-sm)",
+              }}
+            >
+              <span>{food.name}</span>
+              <span style={{ color: "var(--text-tertiary)" }}>{food.category}</span>
+              <span style={{ textAlign: "right" }}>{food.kcal}</span>
+              <span style={{ textAlign: "right" }}>{food.protein}g</span>
+              <span style={{ textAlign: "right" }}>{food.carbs}g</span>
+              <span style={{ textAlign: "right" }}>{food.fat}g</span>
+              <Button variant="ghost" onClick={() => remove(food.id)}>
+                Remover
+              </Button>
+            </div>
+          ))}
+        </div>
       </div>
     </AdminLayout>
   );
