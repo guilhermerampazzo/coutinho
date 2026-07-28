@@ -26,3 +26,8 @@ apps/web/android/app/build/
 apps/web/android/build/
 apps/web/android/captures/
 apps/web/android/**/google-services.json
+
+# Artefatos de validacao do Playwright MCP (screenshots/snapshots locais)
+.playwright-mcp/
+*-mobile.png
+planos-renovacao.png
