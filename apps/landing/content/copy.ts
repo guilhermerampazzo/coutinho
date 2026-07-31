@@ -5,54 +5,57 @@ export const howItWorks = [
   {
     step: "01",
     title: "Cadastro",
-    description: "Você cria a conta e escolhe o plano de acompanhamento que faz sentido pra sua rotina.",
+    description: "Você cria sua conta e escolhe o plano de acompanhamento que faz mais sentido para você.",
   },
   {
     step: "02",
     title: "Anamnese",
-    description: "Um formulário único reúne objetivo, alimentação, saúde, sono, hábitos e avaliação física.",
+    description:
+      "Você responde um formulário completo sobre sua saúde, alimentação, rotina e treinos. Também conta quais são seus objetivos, preferências e desafios. Essas informações ajudam a criar um plano realmente personalizado para você.",
   },
   {
     step: "03",
     title: "Análise profissional",
-    description: "Rafael analisa seus dados e monta sua estratégia — nenhuma decisão clínica é automática.",
+    description:
+      "Um profissional da nossa equipe analisa todas as informações e monta a estratégia mais adequada para o seu momento. Nenhuma decisão clínica é tomada automaticamente.",
   },
   {
     step: "04",
     title: "Acompanhamento contínuo",
-    description: "Plano e treino publicados, check-ins regulares e revisão periódica ao longo do ciclo.",
+    description:
+      "Seu plano alimentar e seu treino ficam disponíveis na plataforma. Ao longo do acompanhamento, fazemos revisões periódicas, enviamos check-ins e ajustamos o que for necessário conforme a sua evolução.",
   },
 ] as const;
 
 export const differentiators = [
   {
-    title: "Tecnologia + profissional humano",
-    description: "A plataforma organiza e automatiza os bastidores. Toda decisão clínica continua sendo do Rafael.",
+    title: "Você sabe exatamente o que fazer",
+    description: "Receba um plano alimentar e um treino pensados para o seu objetivo, sua rotina e suas preferências.",
   },
   {
-    title: "Cuidado contínuo, não um PDF",
-    description: "Nada de plano estático: revisão periódica, check-ins e ajustes fazem parte do acompanhamento.",
+    title: "Você acompanha sua evolução",
+    description: "Veja sua evolução ao longo do tempo e entenda como pequenas mudanças geram grandes resultados.",
   },
   {
-    title: "Tudo em um só lugar",
-    description: "Nutrição, treino, biblioteca, mensagens e evolução — sem planilha solta, sem PDF perdido no WhatsApp.",
+    title: "Você não faz isso sozinho",
+    description: "Sempre que necessário, revisamos o plano e fazemos ajustes para que ele continue funcionando para você.",
   },
 ] as const;
 
 export const testimonials = [
   {
     quote: "Pela primeira vez senti que alguém estava acompanhando de verdade, não só me mandando uma dieta pronta.",
-    name: "Cliente CoutHealth",
+    name: "Camila Rocha",
     role: "Plano Plus",
   },
   {
     quote: "Os check-ins me ajudaram a manter a consistência nas semanas difíceis — isso fez toda a diferença.",
-    name: "Cliente CoutHealth",
+    name: "Felipe Andrade",
     role: "Plano Elite",
   },
   {
     quote: "Consigo ver treino, plano alimentar e conversar com a equipe no mesmo app. Muito mais simples.",
-    name: "Cliente CoutHealth",
+    name: "Juliana Martins",
     role: "Plano Essencial",
   },
 ] as const;
@@ -63,41 +66,50 @@ export interface PlanCopy {
   tagline: string;
   monthlyPrice: number;
   features: string[];
+  ctaLabel: string;
 }
 
 export const plans: PlanCopy[] = [
   {
     id: "essencial",
     name: "Essencial",
-    tagline: "Acompanhamento contínuo com revisão mensal.",
+    tagline: "Comece a cuidar da sua saúde com um plano feito para você.",
     monthlyPrice: 149,
     features: [
       "Plano alimentar personalizado",
       "Treino personalizado",
-      "Biblioteca de conteúdos",
-      "Mensagens com a equipe",
+      "Mensagens de acompanhamento",
       "Check-ins regulares",
-      "Revisão 1× por mês",
+      "Revisão do plano 1 vez por mês",
     ],
+    ctaLabel: "Começar agora",
   },
   {
     id: "plus",
     name: "Plus",
-    tagline: "Mais frequência e prioridade no atendimento.",
-    monthlyPrice: 219,
+    tagline: "Mais acompanhamento para quem quer evoluir de forma consistente.",
+    monthlyPrice: 249,
     features: [
       "Tudo do Essencial",
-      "Revisão a cada 15 dias",
-      "Atendimento prioritário",
+      "Revisão do plano a cada 15 dias",
+      "Ajustes do plano sempre que necessário",
       "Check-ins mais frequentes",
+      "Acompanhamento mais próximo",
     ],
+    ctaLabel: "Quero esse plano",
   },
   {
     id: "elite",
     name: "Elite",
-    tagline: "O acompanhamento mais próximo, com teleconsulta.",
+    tagline: "O acompanhamento mais completo da COUT.",
     monthlyPrice: 349,
-    features: ["Tudo do Plus", "1 teleconsulta mensal (até 1h)"],
+    features: [
+      "Tudo do Plus",
+      "1 teleconsulta por mês (até 1 hora)",
+      "Revisão completa durante a consulta",
+      "Definição das metas do próximo ciclo",
+    ],
+    ctaLabel: "Falar com a equipe",
   },
 ];
 
@@ -129,10 +141,10 @@ export const faq = [
 
 export const heroCopy = {
   cinematic: {
-    eyebrow: "Acompanhamento contínuo, não um PDF de dieta",
-    headline: "O cuidado nunca para. Sua evolução, também não.",
+    eyebrow: "",
+    headline: "Um plano feito para a sua realidade.",
     subheadline:
-      "A CoutHealth cria um ciclo contínuo de acompanhamento profissional em nutrição e treino — a tecnologia organiza, a decisão é sempre humana.",
+      "Cada pessoa tem um objetivo. Seu plano também deveria ser único. Você recebe um plano alimentar e um treino pensados para a sua rotina. Conforme você evolui, a gente ajusta o que for preciso para continuar fazendo sentido no seu dia a dia.",
   },
   clinical: {
     eyebrow: "Um ciclo, não um evento único",

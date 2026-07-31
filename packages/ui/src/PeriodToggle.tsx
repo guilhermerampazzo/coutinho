@@ -12,9 +12,9 @@ export const PERIOD_LABELS: Record<Period, string> = {
 /** % de desconto aplicado sobre o preço mensal — valores placeholder (ver escopo.md §13). */
 export const PERIOD_DISCOUNT: Record<Period, number> = {
   mensal: 0,
-  trimestral: 0.08,
-  semestral: 0.15,
-  anual: 0.25,
+  trimestral: 0.1,
+  semestral: 0.2,
+  anual: 0.4,
 };
 
 export interface PeriodToggleProps {
@@ -64,9 +64,12 @@ export function PeriodToggle({ value, onChange }: PeriodToggleProps) {
               whiteSpace: "nowrap",
             }}
           >
+            {period === "anual" && "⭐ "}
             {PERIOD_LABELS[period]}
             {PERIOD_DISCOUNT[period] > 0 && (
-              <span style={{ marginLeft: 6, opacity: 0.8 }}>-{Math.round(PERIOD_DISCOUNT[period] * 100)}%</span>
+              <span style={{ marginLeft: 6, opacity: 0.8 }}>
+                (Economize {Math.round(PERIOD_DISCOUNT[period] * 100)}%)
+              </span>
             )}
           </button>
         );

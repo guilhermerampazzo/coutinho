@@ -85,6 +85,29 @@ export class AuthService {
     return { user: await this.publicUser(user), tokens: this.issueTokens(user) };
   }
 
+  async loginWithApple(profile: { appleId: string; email: string; name?: string }) {
+    let user = await this.prisma.user.findUnique({ where: { appleId: profile.appleId } });
+    if (!user) {
+      user = await this.prisma.user.findUnique({ where: { email: profile.email } });
+      if (user) {
+        // Mesma pessoa que já entrou por e-mail/senha ou Google — vincula a conta Apple.
+        user = await this.prisma.user.update({ where: { id: user.id }, data: { appleId: profile.appleId } });
+      } else {
+        user = await this.prisma.user.create({
+          data: {
+            email: profile.email,
+            // A Apple só envia o nome na primeira autorização; sem ele, usamos um rótulo
+            // editável no perfil em vez de bloquear o cadastro.
+            name: profile.name ?? "Usuário Apple",
+            appleId: profile.appleId,
+            consentedAt: new Date(),
+          },
+        });
+      }
+    }
+    return { user: await this.publicUser(user), tokens: this.issueTokens(user) };
+  }
+
   async refresh(refreshToken: string) {
     try {
       const payload = this.jwt.verify(refreshToken, { secret: process.env.JWT_REFRESH_SECRET });

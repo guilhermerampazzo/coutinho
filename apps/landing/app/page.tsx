@@ -10,14 +10,20 @@ import { APP_URL } from "../lib/env";
 const hero = heroCopy.cinematic;
 
 export const metadata: Metadata = {
-  title: "CoutHealth — O cuidado nunca para",
+  title: "CoutHealth — Um plano feito para a sua realidade",
   description: hero.subheadline,
 };
 
+// Imagens de acompanhamento (consulta, evolução no celular, treino orientado) em vez de
+// corrida/academia/comida — o cliente pediu que transmitissem cuidado contínuo, não só
+// atividade física e alimentação.
 const diffImages = [
-  "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?auto=format&fit=crop&w=800&q=75",
-  "https://images.unsplash.com/photo-1571731956672-f2b94d7dd0cb?auto=format&fit=crop&w=800&q=75",
-  "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=75",
+  // alguém conversando com um profissional
+  "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=75",
+  // pessoa olhando a evolução no celular
+  "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?auto=format&fit=crop&w=800&q=75",
+  // alguém treinando com orientação
+  "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=800&q=75",
 ];
 
 export default function LandingCinematic() {
@@ -59,11 +65,13 @@ export default function LandingCinematic() {
         <div style={{ position: "relative", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
           <div style={{ maxWidth: 620 }}>
             <div style={{ display: "flex", marginBottom: "var(--sp-6)" }}>
-              <Badge tone="accent">Nutrição + treino · acompanhamento humano</Badge>
+              <Badge tone="accent">Nutrição • Treino • Saúde</Badge>
             </div>
-            <p style={{ color: "var(--accent)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", fontSize: "var(--fs-caption)" }}>
-              {hero.eyebrow}
-            </p>
+            {hero.eyebrow && (
+              <p style={{ color: "var(--accent)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", fontSize: "var(--fs-caption)" }}>
+                {hero.eyebrow}
+              </p>
+            )}
             <h1 className="display" style={{ fontSize: "var(--fs-display-lg)", lineHeight: 1.05, margin: "var(--sp-4) 0" }}>
               {hero.headline}
             </h1>
@@ -71,7 +79,7 @@ export default function LandingCinematic() {
               {hero.subheadline}
             </p>
             <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}>
-              <Button href={`${APP_URL}/criar-conta`}>Criar conta</Button>
+              <Button href={`${APP_URL}/criar-conta`}>Iniciar meu plano</Button>
               <Button variant="secondary" href="#como-funciona">
                 Como funciona
               </Button>
@@ -83,9 +91,11 @@ export default function LandingCinematic() {
       {/* Como funciona — ciclo contínuo */}
       <section id="como-funciona" style={{ padding: "var(--sp-16) var(--sp-6)", maxWidth: 1080, margin: "0 auto" }}>
         <h2 className="display" style={{ fontSize: "var(--fs-display-sm)", margin: "0 0 8px" }}>
-          O problema não é você — é o método
+          Cuidar da saúde não precisa ser complicado.
         </h2>
-        <p style={{ color: "var(--text-secondary)", margin: "0 0 var(--sp-8)" }}>Um ciclo contínuo, não um plano estático.</p>
+        <p style={{ color: "var(--text-secondary)", margin: "0 0 var(--sp-8)" }}>
+          Veja como funciona o acompanhamento na COUT.
+        </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "var(--sp-4)" }}>
           {howItWorks.map((step) => (
             <div

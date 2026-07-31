@@ -50,7 +50,7 @@ export function PlanCard({
             borderRadius: "var(--r-full)",
           }}
         >
-          Mais completo
+          Mais escolhido
         </span>
       )}
       <div>

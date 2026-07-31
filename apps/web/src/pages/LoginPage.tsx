@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { Button, GoogleIcon, TextField } from "@couthealth/ui";
+import { AppleIcon, Button, GoogleIcon, TextField } from "@couthealth/ui";
 import { authApi, ApiError, API_URL } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { resolveRedirectTarget, savePostAuthRedirect, consumePostAuthRedirect } from "../lib/redirect";
+import { useAppleLoginEnabled } from "../lib/useAppleLogin";
 import { AuthLayout } from "./AuthLayout";
 
 export function LoginPage() {
@@ -11,6 +12,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const appleEnabled = useAppleLoginEnabled();
   const { setSession } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -61,6 +63,17 @@ export function LoginPage() {
           <GoogleIcon />
           Continuar com Google
         </Button>
+        {appleEnabled && (
+          <Button
+            variant="secondary"
+            href={`${API_URL}/auth/apple`}
+            onClick={() => savePostAuthRedirect(resolveRedirectTarget(location.search))}
+            style={{ height: 48, justifyContent: "center", gap: 10 }}
+          >
+            <AppleIcon />
+            Continuar com Apple
+          </Button>
+        )}
       </form>
       <p style={{ textAlign: "center", fontSize: "0.875rem", color: "var(--text-secondary)", margin: 0 }}>
         Não tem conta? <Link to="/criar-conta" style={{ color: "var(--accent)" }}>Criar conta</Link>

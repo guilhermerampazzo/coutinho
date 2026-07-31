@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { Button, GoogleIcon, TextField } from "@couthealth/ui";
+import { AppleIcon, Button, GoogleIcon, TextField } from "@couthealth/ui";
 import { authApi, ApiError, API_URL, SITE_URL } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { resolveRedirectTarget, savePostAuthRedirect, consumePostAuthRedirect } from "../lib/redirect";
+import { useAppleLoginEnabled } from "../lib/useAppleLogin";
 import { AuthLayout } from "./AuthLayout";
 
 export function RegisterPage() {
@@ -13,6 +14,7 @@ export function RegisterPage() {
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const appleEnabled = useAppleLoginEnabled();
   const { setSession } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -68,6 +70,17 @@ export function RegisterPage() {
           <GoogleIcon />
           Continuar com Google
         </Button>
+        {appleEnabled && (
+          <Button
+            variant="secondary"
+            href={`${API_URL}/auth/apple`}
+            onClick={() => savePostAuthRedirect(resolveRedirectTarget(location.search))}
+            style={{ height: 48, justifyContent: "center", gap: 10 }}
+          >
+            <AppleIcon />
+            Continuar com Apple
+          </Button>
+        )}
         <label style={{ display: "flex", gap: "var(--sp-2)", alignItems: "flex-start", fontSize: "0.8125rem", color: "var(--text-secondary)", marginTop: 4 }}>
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} style={{ marginTop: 3, accentColor: "var(--accent)" }} />
           <span>

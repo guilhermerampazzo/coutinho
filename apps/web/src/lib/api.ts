@@ -44,6 +44,8 @@ export const authApi = {
   login: (data: { email: string; password: string }) =>
     request<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(data) }),
   me: (token: string) => request<AuthUser>("/auth/me", {}, token),
+  /** Quais logins sociais estão configurados no servidor — evita mostrar botão que só daria erro. */
+  providers: () => request<{ google: boolean; apple: boolean }>("/auth/providers"),
 };
 
 export interface Plan {

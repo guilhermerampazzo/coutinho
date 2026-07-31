@@ -19,7 +19,8 @@ export function PlansSection({ appUrl }: { appUrl: string }) {
           Escolha seu plano
         </h2>
         <p style={{ color: "var(--text-secondary)", maxWidth: 560 }}>
-          Quanto maior o período, maior o desconto. Você pode trocar de plano quando quiser.
+          Cada pessoa tem um objetivo diferente. Escolha o plano que faz mais sentido para o momento em que você está.
+          Se precisar, você pode mudar de plano quando quiser.
         </p>
         <PeriodToggle value={period} onChange={setPeriod} />
       </div>
@@ -42,7 +43,7 @@ export function PlansSection({ appUrl }: { appUrl: string }) {
             originalPriceLabel={period !== "mensal" ? `${formatPrice(plan.monthlyPrice, "mensal")}/mês` : undefined}
             features={plan.features}
             highlighted={plan.id === "plus"}
-            ctaLabel="Criar conta"
+            ctaLabel={plan.ctaLabel}
             onSelect={() => {
               window.location.href = `${appUrl}/criar-conta?plano=${plan.id}&periodo=${period}`;
             }}

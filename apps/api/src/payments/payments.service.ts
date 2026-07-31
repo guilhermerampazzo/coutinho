@@ -7,9 +7,9 @@ import { CheckoutDto } from "./dto/checkout.dto";
 
 const PERIOD_DISCOUNT: Record<Period, number> = {
   MENSAL: 0,
-  TRIMESTRAL: 0.08,
-  SEMESTRAL: 0.15,
-  ANUAL: 0.25,
+  TRIMESTRAL: 0.1,
+  SEMESTRAL: 0.2,
+  ANUAL: 0.4,
 };
 
 const PERIOD_MONTHS: Record<Period, number> = {

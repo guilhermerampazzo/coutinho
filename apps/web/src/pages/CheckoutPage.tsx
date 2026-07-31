@@ -261,16 +261,19 @@ export function CheckoutPage() {
                     PIX
                   </Button>
                   <Button variant={method === "cartao" ? "primary" : "secondary"} onClick={() => setMethod("cartao")} style={{ flex: 1 }}>
-                    Cartão{config?.provider === "MERCADOPAGO" ? " / Google Pay" : ""}
+                    Cartão
                   </Button>
                 </div>
                 <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>
                   {method === "pix"
                     ? totalAmount != null && `Pagamento único de ${totalAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} referente ao período.`
-                    : monthlyAmount != null &&
-                      `Cobrança mensal recorrente de ${monthlyAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}, renovada automaticamente todo mês até o fim do período contratado.`}
+                    : "Sua assinatura será renovada automaticamente conforme o período escolhido. Você pode gerenciar ou cancelar a renovação a qualquer momento pela sua conta."}
                 </p>
                 {error && <p style={{ color: "var(--danger)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{error}</p>}
+
+                <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)", margin: 0, textAlign: "center" }}>
+                  🔒 Pagamento processado com segurança pelo Mercado Pago. Seus dados são protegidos e criptografados.
+                </p>
 
                 {showBrick ? (
                   <div id="mp-payment-brick" ref={brickContainerRef} />

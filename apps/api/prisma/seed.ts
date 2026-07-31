@@ -12,15 +12,14 @@ async function main() {
     create: {
       code: PlanCode.ESSENCIAL,
       name: "Essencial",
-      tagline: "Acompanhamento contínuo com revisão mensal.",
+      tagline: "Comece a cuidar da sua saúde com um plano feito para você.",
       monthlyPrice: 149,
       features: [
         "Plano alimentar personalizado",
         "Treino personalizado",
-        "Biblioteca de conteúdos",
-        "Mensagens com a equipe",
+        "Mensagens de acompanhamento",
         "Check-ins regulares",
-        "Revisão 1× por mês",
+        "Revisão do plano 1 vez por mês",
       ],
     },
   });
@@ -31,9 +30,15 @@ async function main() {
     create: {
       code: PlanCode.PLUS,
       name: "Plus",
-      tagline: "Mais frequência e prioridade no atendimento.",
-      monthlyPrice: 219,
-      features: ["Tudo do Essencial", "Revisão a cada 15 dias", "Atendimento prioritário", "Check-ins mais frequentes"],
+      tagline: "Mais acompanhamento para quem quer evoluir de forma consistente.",
+      monthlyPrice: 249,
+      features: [
+        "Tudo do Essencial",
+        "Revisão do plano a cada 15 dias",
+        "Ajustes do plano sempre que necessário",
+        "Check-ins mais frequentes",
+        "Acompanhamento mais próximo",
+      ],
     },
   });
 
@@ -43,9 +48,14 @@ async function main() {
     create: {
       code: PlanCode.ELITE,
       name: "Elite",
-      tagline: "O acompanhamento mais próximo, com teleconsulta.",
+      tagline: "O acompanhamento mais completo da COUT.",
       monthlyPrice: 349,
-      features: ["Tudo do Plus", "1 teleconsulta mensal (até 1h)"],
+      features: [
+        "Tudo do Plus",
+        "1 teleconsulta por mês (até 1 hora)",
+        "Revisão completa durante a consulta",
+        "Definição das metas do próximo ciclo",
+      ],
     },
   });
 
