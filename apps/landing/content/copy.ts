@@ -42,21 +42,20 @@ export const differentiators = [
   },
 ] as const;
 
+// Depoimentos reais (casos) enviados pelo cliente. O embed do Instagram não está disponível
+// (posts retornam 404 no endpoint público), então usamos as imagens baixadas + texto colado pelo cliente.
 export const testimonials = [
   {
-    quote: "Pela primeira vez senti que alguém estava acompanhando de verdade, não só me mandando uma dieta pronta.",
-    name: "Camila Rocha",
-    role: "Plano Plus",
+    quote: "…",
+    name: "Rodrigo",
+    role: "Caso de sucesso",
+    image: "/case-rodrigo.jpg",
   },
   {
-    quote: "Os check-ins me ajudaram a manter a consistência nas semanas difíceis — isso fez toda a diferença.",
-    name: "Felipe Andrade",
-    role: "Plano Elite",
-  },
-  {
-    quote: "Consigo ver treino, plano alimentar e conversar com a equipe no mesmo app. Muito mais simples.",
-    name: "Juliana Martins",
-    role: "Plano Essencial",
+    quote: "…",
+    name: "Luis",
+    role: "Caso de sucesso",
+    image: "/case-luis.jpg",
   },
 ] as const;
 

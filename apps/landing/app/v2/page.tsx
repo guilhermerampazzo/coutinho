@@ -72,7 +72,7 @@ export default function LandingClinical() {
 
       {/* Diferenciais */}
       <section style={{ maxWidth: 1200, margin: "0 auto", padding: "0 var(--sp-6) var(--sp-16)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--sp-8)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "var(--sp-8)" }}>
           {differentiators.map((d) => (
             <div key={d.title}>
               <h3 style={{ fontSize: "var(--fs-title-sm)", fontWeight: 600, margin: "0 0 10px" }}>{d.title}</h3>
