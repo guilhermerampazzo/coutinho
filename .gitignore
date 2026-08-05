@@ -31,3 +31,7 @@ apps/web/android/**/google-services.json
 .playwright-mcp/
 *-mobile.png
 planos-renovacao.png
+
+# Arquivos locais do cliente (orçamento e pasta de alterações) — não vão pro repo
+orc.pdf
+/alteracoes/

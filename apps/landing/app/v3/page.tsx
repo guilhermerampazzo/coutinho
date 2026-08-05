@@ -133,12 +133,25 @@ export default function LandingEditorial() {
       <section style={{ padding: "var(--sp-16) var(--sp-6)", borderBottom: "2px solid var(--ink-900)" }}>
         <div style={{ maxWidth: 1080, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--sp-6)" }}>
           {testimonials.map((t) => (
-            <div key={t.quote} style={{ border: "1px solid var(--ink-900)", borderRadius: "var(--r-md)", padding: "var(--sp-6)" }}>
-              <p style={{ fontSize: "var(--fs-body-lg)", lineHeight: 1.6 }}>&ldquo;{t.quote}&rdquo;</p>
+            <a
+              key={t.name}
+              href={t.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                border: "1px solid var(--ink-900)",
+                borderRadius: "var(--r-md)",
+                padding: "var(--sp-6)",
+                textDecoration: "none",
+                color: "inherit",
+                display: "block",
+              }}
+            >
+              <p style={{ fontSize: "var(--fs-body-lg)", lineHeight: 1.6, margin: 0 }}>&ldquo;{t.quote}&rdquo;</p>
               <p style={{ color: "var(--gray-500)", fontSize: "var(--fs-caption)", marginTop: "var(--sp-4)" }}>
                 {t.name} · {t.role}
               </p>
-            </div>
+            </a>
           ))}
         </div>
       </section>

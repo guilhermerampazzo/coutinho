@@ -44,18 +44,23 @@ export const differentiators = [
 
 // Depoimentos reais (casos) enviados pelo cliente. O embed do Instagram não está disponível
 // (posts retornam 404 no endpoint público), então usamos as imagens baixadas + texto colado pelo cliente.
+// Descrições baseadas no que aparece nos posts (transformação -14 kg / ganho de força e consistência).
 export const testimonials = [
   {
-    quote: "…",
+    quote:
+      "Emagreci 14 kg com saúde e músculo, de agosto de 2025 a março de 2026. Meu plano evoluiu junto comigo e, ao longo do caminho, sempre houve quem revisasse e ajustasse o que fosse preciso.",
     name: "Rodrigo",
     role: "Caso de sucesso",
     image: "/case-rodrigo.jpg",
+    href: "https://www.instagram.com/3coutinho/p/DWkATcijIjM/",
   },
   {
-    quote: "…",
+    quote:
+      "Ganhei força, definição e consistência nos treinos. Ter um plano feito para a minha realidade — com acompanhamento de verdade, não só uma dieta genérica — fez toda a diferença.",
     name: "Luis",
     role: "Caso de sucesso",
     image: "/case-luis.jpg",
+    href: "https://www.instagram.com/3coutinho/p/DVzHbTDiUbf/",
   },
 ] as const;
 
@@ -114,27 +119,39 @@ export const plans: PlanCopy[] = [
 
 export const faq = [
   {
-    question: "A CoutHealth gera minha dieta e treino automaticamente?",
+    question: "Como funciona o acompanhamento?",
     answer:
-      "Não. A tecnologia organiza seus dados, mas toda dieta e treino são montados e publicados por um profissional humano — nunca por um algoritmo.",
+      "Depois de criar sua conta, você responde uma anamnese completa sobre sua saúde, alimentação, rotina, treinos e objetivos. Com essas informações, eu desenvolvo seu plano alimentar e seu treino, sempre de acordo com a sua realidade e com o que você deseja alcançar. A partir daí, você acompanha tudo pela plataforma e eu faço as revisões conforme o plano contratado.",
   },
   {
-    question: "Preciso ter experiência com treino ou dieta pra começar?",
-    answer: "Não. A anamnese inicial capta seu nível atual, rotina e restrições para montar um plano adequado ao seu ponto de partida.",
+    question: "O plano alimentar e o treino são realmente personalizados?",
+    answer:
+      "Sim. Cada plano é desenvolvido por mim com base nas informações que você compartilha durante a anamnese. Levo em consideração sua rotina, preferências, objetivos e histórico para criar um acompanhamento que realmente faça sentido para você.",
   },
   {
-    question: "Como funciona a revisão periódica?",
+    question: "A plataforma cria a dieta e o treino automaticamente?",
     answer:
-      "De acordo com seu plano, o Rafael revisa sua evolução e ajusta plano/treino a cada 15 ou 30 dias, com base nos check-ins e nas medidas registradas.",
+      "Não. A plataforma organiza as informações e facilita todo o acompanhamento, mas sou eu quem desenvolve seu plano alimentar e seu treino. Nenhuma decisão clínica é tomada automaticamente.",
+  },
+  {
+    question: "Preciso ter experiência com dieta ou treino para começar?",
+    answer:
+      "Não. A COUT foi criada tanto para quem está começando quanto para quem já treina ou segue um plano alimentar. Meu objetivo é tornar esse processo mais simples, organizado e fácil de seguir.",
   },
   {
     question: "Posso mudar de plano depois?",
-    answer: "Sim, a qualquer momento pelo painel — o ajuste de cobrança é proporcional ao período restante.",
+    answer:
+      "Pode. Se em algum momento outro plano fizer mais sentido para você, basta solicitar a mudança. Assim seu acompanhamento continua alinhado às suas necessidades.",
   },
   {
-    question: "Meus dados de saúde estão seguros?",
+    question: "Como funcionam as revisões do plano?",
     answer:
-      "Sim. Dados de saúde são tratados como sensíveis: consentimento explícito, criptografia em trânsito e controle de acesso por papel, conforme a LGPD.",
+      "Seu acompanhamento não termina quando o plano é publicado. Ao longo do processo, acompanho sua evolução e faço os ajustes necessários conforme o plano contratado. A ideia é que seu plano evolua junto com você.",
+  },
+  {
+    question: "Meus dados estão seguros?",
+    answer:
+      "Sim. Suas informações são armazenadas em ambiente protegido e utilizadas apenas para o seu acompanhamento. Elas são tratadas com confidencialidade e usadas exclusivamente para desenvolver um plano alimentar e um treino personalizados.",
   },
 ] as const;
 

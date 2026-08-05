@@ -127,12 +127,27 @@ export default function LandingClinical() {
       <section style={{ padding: "var(--sp-16) var(--sp-6)", background: "var(--ink-800)" }}>
         <div style={{ maxWidth: 1080, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--sp-6)" }}>
           {testimonials.map((t) => (
-            <div key={t.quote} style={{ background: "var(--bg-card)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-lg)", padding: "var(--sp-6)" }}>
-              <p style={{ fontSize: "var(--fs-body-lg)", lineHeight: 1.6 }}>&ldquo;{t.quote}&rdquo;</p>
+            <a
+              key={t.name}
+              href={t.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                background: "var(--bg-card)",
+                border: "1px solid var(--border-hairline)",
+                borderRadius: "var(--r-lg)",
+                padding: "var(--sp-6)",
+                textDecoration: "none",
+                color: "inherit",
+                display: "block",
+                transition: "border-color var(--motion-fast)",
+              }}
+            >
+              <p style={{ fontSize: "var(--fs-body-lg)", lineHeight: 1.6, margin: 0 }}>&ldquo;{t.quote}&rdquo;</p>
               <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)", marginTop: "var(--sp-4)" }}>
                 {t.name} · {t.role}
               </p>
-            </div>
+            </a>
           ))}
         </div>
       </section>

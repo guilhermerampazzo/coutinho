@@ -1,0 +1,114 @@
+/* Landing — estilos responsivos do hero da página principal.
+   O restante da landing usa estilos inline; só o hero precisa de media queries
+   para trocar o banner paisagem (desktop/tablet) pelo banner retrato (celular)
+   e garantir que a pessoa apareça inteira, sem texto por cima. */
+
+.hero {
+  position: relative;
+  min-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-16) var(--sp-6) var(--sp-6);
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background-image: url(/banner.webp);
+  background-size: cover;
+  background-position: center;
+}
+
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(14, 15, 17, 0.94) 0%, rgba(14, 15, 17, 0.78) 40%, rgba(14, 15, 17, 0.35) 68%, rgba(14, 15, 17, 0.15) 100%),
+    linear-gradient(0deg, rgba(14, 15, 17, 0.55), transparent 30%);
+}
+
+.hero-content {
+  position: relative;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  justify-content: center;
+}
+
+.hero-text {
+  max-width: 620px;
+}
+
+.hero-subtitle {
+  font-size: var(--fs-title-sm);
+}
+
+.hero-differentials {
+  margin: var(--sp-7) 0 var(--sp-8);
+}
+
+.hero-title {
+  font-size: var(--fs-display-lg);
+}
+
+/* Rede de segurança: palavras longas em títulos nunca estouram o container
+   (ex.: "acompanhamento" em telas de 320px). */
+h1,
+h2,
+h3,
+.display {
+  overflow-wrap: break-word;
+}
+
+/* Banner retrato (formato celular) — só aparece em telas de celular, abaixo do texto,
+   para que a pessoa fique sempre visível e nunca coberta por texto. */
+.hero-mobile-img {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .hero {
+    min-height: 0;
+    padding: var(--sp-10) var(--sp-5) 0;
+  }
+
+  /* Banner paisagem é ocultado no celular — a versão retrato assume. */
+  .hero-bg,
+  .hero-overlay {
+    display: none;
+  }
+
+  .hero-content {
+    justify-content: flex-start;
+  }
+
+  .hero-text {
+    max-width: 100%;
+  }
+
+  .hero-title {
+    font-size: 2rem;
+  }
+
+  .hero-mobile-img {
+    display: block;
+    width: 100%;
+    max-height: 70vh;
+    margin-top: var(--sp-6);
+    object-fit: cover;
+    object-position: center bottom;
+  }
+
+  /* Compacta o texto do hero no mobile para a pessoa do banner aparecer mais cedo. */
+  .hero-subtitle {
+    font-size: var(--fs-body-sm);
+  }
+
+  .hero-differentials {
+    margin: var(--sp-5) 0 var(--sp-6);
+  }
+}

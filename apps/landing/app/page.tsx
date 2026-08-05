@@ -6,6 +6,7 @@ import { FaqSection } from "../components/FaqSection";
 import { LandingHeader } from "../components/LandingHeader";
 import { LandingFooter } from "../components/LandingFooter";
 import { APP_URL } from "../lib/env";
+import "./landing.css";
 
 const hero = heroCopy.cinematic;
 
@@ -70,38 +71,11 @@ export default function LandingCinematic() {
       <LandingHeader current="/" variant="dark" />
 
       {/* Hero full-bleed com o banner do cliente */}
-      <section
-        style={{
-          position: "relative",
-          minHeight: "88vh",
-          display: "flex",
-          flexDirection: "column",
-          padding: "var(--sp-16) var(--sp-6) var(--sp-6)",
-          overflow: "hidden",
-          borderBottom: "1px solid var(--border-hairline)",
-        }}
-      >
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            inset: 0,
-            backgroundImage: "url(/banner.webp)",
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-          }}
-        />
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            inset: 0,
-            background:
-              "linear-gradient(90deg, rgba(14,15,17,.94) 0%, rgba(14,15,17,.78) 40%, rgba(14,15,17,.35) 68%, rgba(14,15,17,.15) 100%), linear-gradient(0deg, rgba(14,15,17,.55), transparent 30%)",
-          }}
-        />
-        <div style={{ position: "relative", maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
-          <div style={{ maxWidth: 620 }}>
+      <section className="hero">
+        <div className="hero-bg" aria-hidden />
+        <div className="hero-overlay" aria-hidden />
+        <div className="hero-content">
+          <div className="hero-text">
             <div style={{ display: "flex", marginBottom: "var(--sp-6)" }}>
               <Badge tone="accent">Nutrição • Treino • Saúde</Badge>
             </div>
@@ -110,22 +84,13 @@ export default function LandingCinematic() {
                 {hero.eyebrow}
               </p>
             )}
-            <h1
-              className="display"
-              style={{
-                fontSize: "var(--fs-display-lg)",
-                lineHeight: 1.03,
-                letterSpacing: "-0.03em",
-                textWrap: "balance",
-                margin: "var(--sp-4) 0",
-              }}
-            >
+            <h1 className="display hero-title" style={{ lineHeight: 1.03, letterSpacing: "-0.03em", textWrap: "balance", margin: "var(--sp-4) 0" }}>
               {hero.headline}
             </h1>
             <p
+              className="hero-subtitle"
               style={{
                 color: "var(--text-secondary)",
-                fontSize: "var(--fs-title-sm)",
                 lineHeight: 1.6,
                 maxWidth: "46ch",
                 margin: 0,
@@ -136,13 +101,13 @@ export default function LandingCinematic() {
 
             {/* Diferenciais entre o subtítulo e os CTAs */}
             <div
+              className="hero-differentials"
               style={{
                 display: "flex",
                 flexWrap: "wrap",
                 alignItems: "center",
                 columnGap: "var(--sp-8)",
                 rowGap: "var(--sp-3)",
-                margin: "var(--sp-7) 0 var(--sp-8)",
               }}
             >
               {heroDifferentials.map((d) => (
@@ -162,6 +127,15 @@ export default function LandingCinematic() {
               </Button>
             </div>
           </div>
+
+          {/* Banner retrato (formato celular) — visível apenas no mobile, abaixo do texto,
+              para que a pessoa apareça inteira e nunca seja coberta por texto. */}
+          <img
+            className="hero-mobile-img"
+            src="/bannercelular.png"
+            alt="Rafael Coutinho, nutricionista e personal trainer"
+            loading="eager"
+          />
         </div>
       </section>
 
@@ -231,10 +205,13 @@ export default function LandingCinematic() {
         <h2 className="display" style={{ fontSize: "var(--fs-display-sm)", maxWidth: 880, margin: "0 auto var(--sp-8)" }}>
           Casos reais de quem acompanho
         </h2>
-        <div style={{ maxWidth: 880, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "var(--sp-6)" }}>
+        <div style={{ maxWidth: 880, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))", gap: "var(--sp-6)" }}>
           {testimonials.map((t) => (
-            <div
+            <a
               key={t.name}
+              href={t.href}
+              target="_blank"
+              rel="noopener noreferrer"
               style={{
                 background: "var(--bg-card)",
                 border: "1px solid var(--border-hairline)",
@@ -242,11 +219,14 @@ export default function LandingCinematic() {
                 overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
+                textDecoration: "none",
+                color: "inherit",
+                transition: "border-color var(--motion-fast)",
               }}
             >
               <img
                 src={t.image}
-                alt={`Depoimento de ${t.name}`}
+                alt={`Caso de sucesso de ${t.name} no Instagram`}
                 loading="lazy"
                 style={{ width: "100%", aspectRatio: "4 / 5", objectFit: "cover", display: "block" }}
               />
@@ -256,7 +236,7 @@ export default function LandingCinematic() {
                   {t.name} · {t.role}
                 </p>
               </div>
-            </div>
+            </a>
           ))}
         </div>
       </section>
