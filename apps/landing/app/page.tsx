@@ -69,14 +69,14 @@ export default function LandingCinematic() {
     <main style={{ background: "var(--ink-900)" }}>
       <LandingHeader current="/" variant="dark" />
 
-      {/* Hero full-bleed escuro, foto à direita */}
+      {/* Hero full-bleed com o banner do cliente */}
       <section
         style={{
           position: "relative",
           minHeight: "88vh",
           display: "flex",
-          alignItems: "center",
-          padding: "var(--sp-16) var(--sp-6)",
+          flexDirection: "column",
+          padding: "var(--sp-16) var(--sp-6) var(--sp-6)",
           overflow: "hidden",
           borderBottom: "1px solid var(--border-hairline)",
         }}
@@ -86,9 +86,9 @@ export default function LandingCinematic() {
           style={{
             position: "absolute",
             inset: 0,
-            backgroundImage: "url(https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=1800&q=70)",
+            backgroundImage: "url(/banner.webp)",
             backgroundSize: "cover",
-            backgroundPosition: "center 35%",
+            backgroundPosition: "center",
           }}
         />
         <div
@@ -97,54 +97,71 @@ export default function LandingCinematic() {
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(100deg, var(--ink-900) 38%, rgba(14,15,17,.55) 62%, rgba(14,15,17,0) 100%)",
+              "linear-gradient(90deg, rgba(14,15,17,.94) 0%, rgba(14,15,17,.78) 40%, rgba(14,15,17,.35) 68%, rgba(14,15,17,.15) 100%), linear-gradient(0deg, rgba(14,15,17,.55), transparent 30%)",
           }}
         />
-        <div style={{ position: "relative", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
-          <div style={{ maxWidth: 620 }}>
-            <div style={{ display: "flex", marginBottom: "var(--sp-6)" }}>
-              <Badge tone="accent">Nutrição • Treino • Saúde</Badge>
-            </div>
-            {hero.eyebrow && (
-              <p style={{ color: "var(--accent)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", fontSize: "var(--fs-caption)" }}>
-                {hero.eyebrow}
+        <div style={{ position: "relative", maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", flex: 1 }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <div style={{ maxWidth: 620 }}>
+              <div style={{ display: "flex", marginBottom: "var(--sp-6)" }}>
+                <Badge tone="accent">Nutrição • Treino • Saúde</Badge>
+              </div>
+              {hero.eyebrow && (
+                <p style={{ color: "var(--accent)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", fontSize: "var(--fs-caption)" }}>
+                  {hero.eyebrow}
+                </p>
+              )}
+              <h1
+                className="display"
+                style={{
+                  fontSize: "var(--fs-display-lg)",
+                  lineHeight: 1.03,
+                  letterSpacing: "-0.03em",
+                  textWrap: "balance",
+                  margin: "var(--sp-4) 0",
+                }}
+              >
+                {hero.headline}
+              </h1>
+              <p
+                style={{
+                  color: "var(--text-secondary)",
+                  fontSize: "var(--fs-title-sm)",
+                  lineHeight: 1.6,
+                  maxWidth: "46ch",
+                  margin: "0 0 var(--sp-8)",
+                }}
+              >
+                {hero.subheadline}
               </p>
-            )}
-            <h1 className="display" style={{ fontSize: "var(--fs-display-lg)", lineHeight: 1.05, margin: "var(--sp-4) 0" }}>
-              {hero.headline}
-            </h1>
-            <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-title-sm)", margin: 0 }}>
-              {hero.subheadline}
-            </p>
-            {/* Diferenciais entre o texto e os CTAs */}
-            <div style={{ display: "flex", gap: "var(--sp-6)", flexWrap: "wrap", margin: "var(--sp-7) 0 var(--sp-8)" }}>
-              {heroDifferentials.map((d) => (
-                <div key={d.label} style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", maxWidth: 230 }}>
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      width: 44,
-                      height: 44,
-                      borderRadius: "var(--r-full)",
-                      display: "grid",
-                      placeItems: "center",
-                      background: "rgba(247,190,0,0.08)",
-                      border: "1px solid rgba(247,190,0,0.25)",
-                      color: "var(--accent)",
-                    }}
-                  >
-                    <d.icon />
-                  </span>
-                  <span style={{ fontSize: "var(--fs-caption)", lineHeight: 1.35, color: "var(--text-secondary)" }}>{d.label}</span>
-                </div>
-              ))}
+              <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}>
+                <Button href={`${APP_URL}/criar-conta`}>Iniciar meu plano</Button>
+                <Button variant="secondary" href="#como-funciona">
+                  Como funciona
+                </Button>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}>
-              <Button href={`${APP_URL}/criar-conta`}>Iniciar meu plano</Button>
-              <Button variant="secondary" href="#como-funciona">
-                Como funciona
-              </Button>
-            </div>
+          </div>
+
+          {/* Diferenciais — faixa de confiança ancorada no rodapé do hero */}
+          <div
+            style={{
+              paddingTop: "var(--sp-8)",
+              borderTop: "1px solid rgba(255,255,255,0.1)",
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "var(--sp-6) var(--sp-10)",
+            }}
+          >
+            {heroDifferentials.map((d) => (
+              <div key={d.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ color: "var(--accent)", display: "grid", placeItems: "center" }}>
+                  <d.icon size={18} />
+                </span>
+                <span style={{ fontSize: "var(--fs-caption)", lineHeight: 1.4, color: "var(--text-secondary)" }}>{d.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
