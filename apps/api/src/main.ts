@@ -6,7 +6,7 @@ import cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   app.use(helmet());
   // Necessário para o `state` anti-CSRF do Sign in with Apple (cookie httpOnly de curta duração).
   app.use(cookieParser());

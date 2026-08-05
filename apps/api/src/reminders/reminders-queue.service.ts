@@ -9,10 +9,6 @@ function anamnesisJobId(userId: string) {
   return `anamnesis-${userId}`;
 }
 
-function subscriptionExpiryJobId(subscriptionId: string) {
-  return `subscription-expiring-${subscriptionId}`;
-}
-
 /**
  * Enfileira lembretes processados pelo apps/worker (fila "reminders", compartilhada via Redis).
  * jobId = anamnesisJobId(userId) — cada novo save do rascunho substitui o lembrete anterior
@@ -35,21 +31,6 @@ export class RemindersQueueService implements OnModuleDestroy {
 
   async cancelAnamnesisReminder(userId: string) {
     await this.queue.remove(anamnesisJobId(userId)).catch(() => undefined);
-  }
-
-  /**
-   * Assinatura de cartão (recorrente) expira quando o período contratado termina — o worker cancela
-   * a cobrança no Mercado Pago, marca EXPIRED e notifica o cliente pra escolher de novo.
-   */
-  async scheduleSubscriptionExpiry(subscriptionId: string, currentPeriodEnd: Date) {
-    const jobId = subscriptionExpiryJobId(subscriptionId);
-    await this.queue.remove(jobId).catch(() => undefined);
-    const delay = Math.max(0, currentPeriodEnd.getTime() - Date.now());
-    await this.queue.add("subscription-expiring", { subscriptionId }, { jobId, delay, removeOnComplete: true, removeOnFail: true });
-  }
-
-  async cancelSubscriptionExpiry(subscriptionId: string) {
-    await this.queue.remove(subscriptionExpiryJobId(subscriptionId)).catch(() => undefined);
   }
 
   /** Notificação/campanha agendada pelo admin (Fase 8) — o worker resolve o público e cria as Notifications no horário. */

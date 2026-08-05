@@ -39,7 +39,7 @@ enum SubscriptionStatus {
 }
 
 enum PaymentProviderName {
-  MERCADOPAGO
+  STRIPE
 }
 
 enum PaymentStatus {
@@ -99,6 +99,7 @@ model User {
   role         Role      @default(CLIENT)
   consentedAt  DateTime?
   pushToken    String?
+  stripeCustomerId String? @unique
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -148,7 +149,7 @@ model Subscription {
   coupon           Coupon?            @relation(fields: [couponId], references: [id])
   startedAt        DateTime?
   currentPeriodEnd DateTime?
-  mpPreapprovalId  String?            @unique
+  stripeSubscriptionId String?        @unique
   createdAt        DateTime           @default(now())
 
   payments Payment[]

@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { Period, PlanCode, PaymentStatus } from "@prisma/client";
+import Stripe from "stripe";
 import { PrismaService } from "../prisma/prisma.service";
-import { RemindersQueueService } from "../reminders/reminders-queue.service";
-import { MercadoPagoPaymentProvider } from "./providers/mercadopago-payment.provider";
+import { StripePaymentProvider } from "./providers/stripe-payment.provider";
+import type { PixPaymentInfo } from "./payment-provider.interface";
 import { CheckoutDto } from "./dto/checkout.dto";
 
 const PERIOD_DISCOUNT: Record<Period, number> = {
@@ -19,14 +20,20 @@ const PERIOD_MONTHS: Record<Period, number> = {
   ANUAL: 12,
 };
 
+/** Validade do QR Code PIX — depois disso o Stripe cancela o PaymentIntent sozinho. */
+const PIX_EXPIRATION_MS = 30 * 60 * 1000;
+
 @Injectable()
 export class PaymentsService {
-  constructor(
-    private prisma: PrismaService,
-    private mercadoPagoProvider: MercadoPagoPaymentProvider,
-    private reminders: RemindersQueueService
-  ) {}
+  constructor(private prisma: PrismaService, private stripeProvider: StripePaymentProvider) {}
 
+  /**
+   * Cria a Subscription (PENDING) e uma Checkout Session embutida do Stripe.
+   * - PIX    → mode=payment, cobrança única do valor cheio do período.
+   * - Cartão → mode=subscription, recorrente mensal; o Stripe cobra todo mês e cancela sozinho
+   *            (`cancel_at`) quando o período contratado termina — sem job de expiração (ver
+   *            DECISIONS.md). A liberação acontece no webhook, não aqui.
+   */
   async checkout(userId: string, dto: CheckoutDto) {
     const [user, plan] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({ where: { id: userId } }),
@@ -56,157 +63,336 @@ export class PaymentsService {
       },
     });
 
+    const stripeCustomerId = await this.stripeProvider.getOrCreateCustomer(userId, user.email, user.name);
+    const returnUrl = `${process.env.APP_PUBLIC_URL ?? "https://localhost"}/checkout?success=1`;
+
     if (dto.method === "pix") {
-      return this.checkoutPix(subscription.id, plan.monthlyPrice, months, periodDiscount, couponDiscount, user);
+      const totalAmount = Number((plan.monthlyPrice * months * (1 - periodDiscount) * (1 - couponDiscount)).toFixed(2));
+      const expiresAt = new Date(Date.now() + PIX_EXPIRATION_MS);
+      const pixResult = await this.stripeProvider.createPixPaymentIntent({
+        subscriptionId: subscription.id,
+        amount: totalAmount,
+        stripeCustomerId,
+        expiresAt,
+      });
+      await this.prisma.payment.create({
+        data: {
+          subscriptionId: subscription.id,
+          provider: this.stripeProvider.name,
+          providerChargeId: pixResult.paymentIntentId,
+          amount: totalAmount,
+          status: "PENDING",
+          method: "pix",
+        },
+      });
+      return {
+        subscriptionId: subscription.id,
+        method: "pix",
+        amount: totalAmount,
+        pix: {
+          qrCode: pixResult.qrCode,
+          qrCodeImageUrl: pixResult.qrCodeImageUrl,
+          hostedInstructionsUrl: pixResult.hostedInstructionsUrl,
+          expiresAt: pixResult.expiresAt,
+        },
+      };
     }
-    return this.checkoutRecurringCard(subscription.id, dto, plan.monthlyPrice, months, periodDiscount, couponDiscount, user);
+
+    const monthlyAmount = Number((plan.monthlyPrice * (1 - periodDiscount) * (1 - couponDiscount)).toFixed(2));
+    const session = await this.stripeProvider.createEmbeddedCheckoutSession({
+      subscriptionId: subscription.id,
+      method: "cartao",
+      stripeCustomerId,
+      monthlyAmount,
+      totalAmount: 0,
+      months,
+      returnUrl,
+    });
+    return { subscriptionId: subscription.id, mode: session.mode, clientSecret: session.clientSecret, amount: monthlyAmount, method: "cartao" };
   }
 
-  /** PIX continua cobrança única do valor cheio do período — sem recorrência (ver DECISIONS.md). */
-  private async checkoutPix(
-    subscriptionId: string,
-    monthlyPrice: number,
-    months: number,
-    periodDiscount: number,
-    couponDiscount: number,
-    user: { name: string; email: string }
-  ) {
-    const amount = Number((monthlyPrice * months * (1 - periodDiscount) * (1 - couponDiscount)).toFixed(2));
+  /**
+   * Status do PIX para o front fazer polling. FALHA SEGURA CRÍTICA: se o webhook não chegou
+   * (atraso/config ausente) e o pagamento já está pago no Stripe, ativa a assinatura aqui mesmo —
+   * assim o usuário nunca fica "pagou mas continua bloqueado" (bug reportado na fase Mercado Pago).
+   */
+  async getPixStatus(userId: string, subscriptionId: string) {
+    const subscription = await this.prisma.subscription.findUnique({ where: { id: subscriptionId } });
+    if (!subscription || subscription.userId !== userId) {
+      throw new ForbiddenException("Você não tem acesso a este pagamento.");
+    }
 
-    const charge = await this.mercadoPagoProvider.createCharge({
-      subscriptionId,
-      amount,
-      method: "pix",
-      customer: { name: user.name, email: user.email },
+    const payment = await this.prisma.payment.findFirst({
+      where: { subscriptionId, method: "pix" },
+      orderBy: { createdAt: "desc" },
     });
+    if (!payment?.providerChargeId) {
+      return { status: "pending" as const };
+    }
 
-    const payment = await this.prisma.payment.create({
-      data: {
-        subscriptionId,
-        provider: this.mercadoPagoProvider.name,
-        providerChargeId: charge.providerChargeId,
-        amount,
-        status: charge.status,
+    let info: PixPaymentInfo;
+    try {
+      info = await this.stripeProvider.retrievePixPayment(payment.providerChargeId);
+    } catch {
+      // PaymentIntent inexistente/inacessível — o front pode regenerar um novo PIX.
+      return { status: "failed" as const };
+    }
+
+    // Fallback de ativação: pagamento pago mas webhook ainda não processou (ou nunca chegará).
+    if (info.status === "paid" && subscription.status === "PENDING") {
+      await this.activateSubscription(subscription.id, PERIOD_MONTHS[subscription.period]);
+      await this.recordPayment(subscription.id, {
+        providerChargeId: payment.providerChargeId,
+        amount: payment.amount,
+        status: "APPROVED",
         method: "pix",
-      },
-    });
+      });
+    }
 
-    if (charge.status === "APPROVED") {
-      await this.activateSubscription(subscriptionId, months);
+    if (info.status === "expired" && payment.status === "PENDING") {
+      await this.prisma.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
     }
 
     return {
-      subscriptionId,
-      paymentId: payment.id,
-      status: charge.status,
-      checkoutUrl: charge.checkoutUrl,
-      pixQrCode: charge.pixQrCode,
-      pixQrCodeImage: charge.pixQrCodeImage,
-      amount,
+      status: info.status,
+      expiresAt: info.expiresAt,
+      amount: payment.amount,
+      ...(info.status === "pending"
+        ? {
+            qrCode: info.qrCode,
+            qrCodeImageUrl: info.qrCodeImageUrl,
+            hostedInstructionsUrl: info.hostedInstructionsUrl,
+          }
+        : {}),
     };
   }
 
   /**
-   * Cartão vira assinatura recorrente mensal (Mercado Pago `/preapproval`, estilo Claude/Netflix):
-   * o período escolhido só trava o desconto e por quantos meses a cobrança mensal se repete —
-   * ao fim, expira e o cliente precisa escolher de novo (ver reminders-queue.service.ts).
+   * Gera um novo QR PIX para a MESMA assinatura ainda pendente (sem duplicar Subscription),
+   * cancelando os PIX antigos não pagos daquele pedido.
    */
-  private async checkoutRecurringCard(
-    subscriptionId: string,
-    dto: CheckoutDto,
-    monthlyPrice: number,
-    months: number,
-    periodDiscount: number,
-    couponDiscount: number,
-    user: { name: string; email: string }
-  ) {
-    if (!dto.token) {
-      throw new BadRequestException("Token de cartão ausente — tokenize o cartão no navegador antes do checkout.");
+  async regeneratePix(userId: string, subscriptionId: string) {
+    const subscription = await this.prisma.subscription.findUnique({ where: { id: subscriptionId } });
+    if (!subscription || subscription.userId !== userId) {
+      throw new ForbiddenException("Você não tem acesso a este pagamento.");
     }
-    const monthlyAmount = Number((monthlyPrice * (1 - periodDiscount) * (1 - couponDiscount)).toFixed(2));
+    if (subscription.status !== "PENDING") {
+      throw new BadRequestException("Esta assinatura já foi ativada.");
+    }
 
-    const result = await this.mercadoPagoProvider.createSubscription({
+    const stale = await this.prisma.payment.findMany({ where: { subscriptionId, method: "pix", status: "PENDING" } });
+    for (const p of stale) {
+      if (p.providerChargeId) await this.stripeProvider.cancelPaymentIntent(p.providerChargeId);
+      await this.prisma.payment.update({ where: { id: p.id }, data: { status: "FAILED" } });
+    }
+
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const plan = await this.prisma.plan.findUniqueOrThrow({ where: { id: subscription.planId } });
+    const coupon = subscription.couponId
+      ? await this.prisma.coupon.findUnique({ where: { id: subscription.couponId } })
+      : null;
+    const periodDiscount = PERIOD_DISCOUNT[subscription.period];
+    const couponDiscount = coupon?.percentOff ?? 0;
+    const months = PERIOD_MONTHS[subscription.period];
+    const totalAmount = Number((plan.monthlyPrice * months * (1 - periodDiscount) * (1 - couponDiscount)).toFixed(2));
+
+    const stripeCustomerId = await this.stripeProvider.getOrCreateCustomer(userId, user.email, user.name);
+    const expiresAt = new Date(Date.now() + PIX_EXPIRATION_MS);
+    const pixResult = await this.stripeProvider.createPixPaymentIntent({
       subscriptionId,
-      monthlyAmount,
-      months,
-      customer: { name: user.name, email: user.email },
-      cardToken: dto.token,
+      amount: totalAmount,
+      stripeCustomerId,
+      expiresAt,
     });
-
-    const status: PaymentStatus = result.status === "authorized" ? "APPROVED" : result.status === "cancelled" ? "FAILED" : "PENDING";
-
-    await this.prisma.subscription.update({ where: { id: subscriptionId }, data: { mpPreapprovalId: result.mpPreapprovalId } });
-
-    const payment = await this.prisma.payment.create({
+    await this.prisma.payment.create({
       data: {
         subscriptionId,
-        provider: this.mercadoPagoProvider.name,
-        providerChargeId: result.mpPreapprovalId,
-        amount: monthlyAmount,
-        status,
-        method: "cartao",
+        provider: this.stripeProvider.name,
+        providerChargeId: pixResult.paymentIntentId,
+        amount: totalAmount,
+        status: "PENDING",
+        method: "pix",
       },
     });
 
-    if (status === "APPROVED") {
-      await this.activateSubscription(subscriptionId, months);
-    }
-
     return {
       subscriptionId,
-      paymentId: payment.id,
-      status,
-      checkoutUrl: result.initPoint,
-      amount: monthlyAmount,
+      method: "pix",
+      amount: totalAmount,
+      pix: {
+        qrCode: pixResult.qrCode,
+        qrCodeImageUrl: pixResult.qrCodeImageUrl,
+        hostedInstructionsUrl: pixResult.hostedInstructionsUrl,
+        expiresAt: pixResult.expiresAt,
+      },
     };
   }
 
-  async activateSubscription(subscriptionId: string, months: number) {
+  /**
+   * Webhook do Stripe — a assinatura é ativada/registrada aqui (fonte da verdade é o Stripe).
+   * Eventos tratados:
+   * - checkout.session.completed       → cartão (subscription): ativa + guarda stripeSubscriptionId.
+   *                                      PIX (payment): só ativa se payment_status = "paid" (PIX é
+   *                                      assíncrono; senão aguarda o async_payment_succeeded).
+   * - checkout.session.async_payment_succeeded → PIX pago: ativa + registra o Payment.
+   * - invoice.paid                     → cobrança mensal recorrente: registra cada Payment.
+   * - customer.subscription.deleted    → Stripe cancelou (cancel_at chegou): marca EXPIRED + notifica.
+   */
+  async handleStripeWebhook(event: Stripe.Event) {
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const subscription = await this.findBySession(session);
+        if (!subscription) return { ok: false };
+
+        if (session.mode === "subscription" && session.subscription) {
+          const stripeSubscriptionId = String(session.subscription);
+          await this.prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { stripeSubscriptionId },
+          });
+          // Agenda o cancelamento automático no fim do período (checkout não aceita cancel_at;
+          // só a subscription já criada). O webhook customer.subscription.deleted chega depois.
+          const endDate = new Date();
+          endDate.setMonth(endDate.getMonth() + PERIOD_MONTHS[subscription.period]);
+          await this.stripeProvider.setSubscriptionCancelAt(stripeSubscriptionId, endDate);
+
+          const activated = await this.activateSubscription(subscription.id, PERIOD_MONTHS[subscription.period]);
+          if (activated) {
+            await this.recordPayment(subscription.id, {
+              providerChargeId: session.payment_intent ? String(session.payment_intent) : `session_${session.id}`,
+              amount: (session.amount_total ?? 0) / 100,
+              status: "APPROVED",
+              method: "cartao",
+            });
+          }
+        } else if (session.mode === "payment" && session.payment_status === "paid") {
+          await this.onPixPaid(subscription, session);
+        }
+        return { ok: true };
+      }
+
+      case "checkout.session.async_payment_succeeded": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const subscription = await this.findBySession(session);
+        if (!subscription) return { ok: false };
+        await this.onPixPaid(subscription, session);
+        return { ok: true };
+      }
+
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice & {
+          subscription?: string | null;
+          payment_intent?: string | null;
+        };
+        const subscription = await this.prisma.subscription.findUnique({
+          where: { stripeSubscriptionId: String(invoice.subscription ?? "") },
+        });
+        if (!subscription) return { ok: true };
+        await this.recordPayment(subscription.id, {
+          providerChargeId: invoice.payment_intent ? String(invoice.payment_intent) : `invoice_${invoice.id}`,
+          amount: invoice.amount_paid / 100,
+          status: "APPROVED",
+          method: "cartao",
+        });
+        return { ok: true };
+      }
+
+      // ---- PIX customizado (PaymentIntent) — o evento que confirma o pagamento no Stripe. ----
+      case "payment_intent.succeeded": {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        const subscriptionId = (paymentIntent.metadata as any)?.subscriptionId;
+        if (!subscriptionId) return { ok: true };
+        const subscription = await this.prisma.subscription.findUnique({ where: { id: subscriptionId } });
+        if (!subscription || subscription.status === "ACTIVE") return { ok: true };
+        await this.activateSubscription(subscriptionId, PERIOD_MONTHS[subscription.period]);
+        await this.recordPayment(subscriptionId, {
+          providerChargeId: paymentIntent.id,
+          amount: (paymentIntent.amount ?? 0) / 100,
+          status: "APPROVED",
+          method: "pix",
+        });
+        return { ok: true };
+      }
+
+      case "payment_intent.canceled": {
+        // PIX expirado/cancelado — marca o Payment como FAILED (a Subscription segue PENDING).
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        const subscriptionId = (paymentIntent.metadata as any)?.subscriptionId;
+        if (subscriptionId) {
+          await this.prisma.payment.updateMany({
+            where: { subscriptionId, providerChargeId: paymentIntent.id, status: "PENDING" },
+            data: { status: "FAILED" },
+          });
+        }
+        return { ok: true };
+      }
+
+      case "customer.subscription.deleted": {
+        const deleted = event.data.object as Stripe.Subscription;
+        const subscription = await this.prisma.subscription.findUnique({
+          where: { stripeSubscriptionId: deleted.id },
+        });
+        if (!subscription || subscription.status !== "ACTIVE") return { ok: true };
+        await this.prisma.subscription.update({ where: { id: subscription.id }, data: { status: "EXPIRED" } });
+        await this.prisma.notification.create({
+          data: {
+            userId: subscription.userId,
+            type: "PERSONALIZADA",
+            title: "Sua assinatura expirou",
+            body: "O período que você contratou chegou ao fim. Escolha um plano para continuar seu acompanhamento.",
+            sentAt: new Date(),
+          },
+        });
+        return { ok: true };
+      }
+
+      default:
+        return { ok: false };
+    }
+  }
+
+  /** Localiza a Subscription pelo client_reference_id/metadata da sessão (criada no checkout). */
+  private async findBySession(session: Stripe.Checkout.Session) {
+    const ref = session.client_reference_id ?? (session.metadata as any)?.subscriptionId;
+    if (!ref) return null;
+    return this.prisma.subscription.findUnique({ where: { id: ref } });
+  }
+
+  private async onPixPaid(subscription: { id: string; period: Period }, session: Stripe.Checkout.Session) {
+    const activated = await this.activateSubscription(subscription.id, PERIOD_MONTHS[subscription.period]);
+    if (activated) {
+      await this.recordPayment(subscription.id, {
+        providerChargeId: session.payment_intent ? String(session.payment_intent) : `session_${session.id}`,
+        amount: (session.amount_total ?? 0) / 100,
+        status: "APPROVED",
+        method: "pix",
+      });
+    }
+  }
+
+  private async activateSubscription(subscriptionId: string, months: number) {
+    const current = await this.prisma.subscription.findUnique({ where: { id: subscriptionId } });
+    if (!current || current.status !== "PENDING") return false;
+
     const currentPeriodEnd = new Date();
     currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + months);
     await this.prisma.subscription.update({
       where: { id: subscriptionId },
       data: { status: "ACTIVE", startedAt: new Date(), currentPeriodEnd },
     });
-    await this.reminders.scheduleSubscriptionExpiry(subscriptionId, currentPeriodEnd);
+    return true;
   }
 
-  /**
-   * Webhook do Mercado Pago pra cobranças recorrentes (assinatura sem plano associado).
-   * `subscription_authorized_payment`: uma cobrança mensal aconteceu (sucesso ou falha) — registra o Payment.
-   * `subscription_preapproval`: o cliente cancelou a assinatura direto no Mercado Pago — reflete aqui.
-   */
-  async handleMercadoPagoWebhook(topic: string, dataId: string) {
-    if (topic === "subscription_authorized_payment") {
-      const authorizedPayment = await this.mercadoPagoProvider.getAuthorizedPayment(dataId);
-      const subscription = await this.prisma.subscription.findUnique({ where: { mpPreapprovalId: authorizedPayment.preapprovalId } });
-      if (!subscription) return { ok: false };
-
-      const status: PaymentStatus = authorizedPayment.status === "processed" ? "APPROVED" : "FAILED";
-      await this.prisma.payment.create({
-        data: {
-          subscriptionId: subscription.id,
-          provider: this.mercadoPagoProvider.name,
-          providerChargeId: dataId,
-          amount: authorizedPayment.transactionAmount,
-          status,
-          method: "cartao",
-        },
-      });
-      return { ok: true };
-    }
-
-    if (topic === "subscription_preapproval") {
-      const preapproval = await this.mercadoPagoProvider.getPreapproval(dataId);
-      if (preapproval.status !== "cancelled") return { ok: true };
-
-      const subscription = await this.prisma.subscription.findUnique({ where: { mpPreapprovalId: dataId } });
-      if (!subscription) return { ok: false };
-      await this.prisma.subscription.update({ where: { id: subscription.id }, data: { status: "CANCELED" } });
-      await this.reminders.cancelSubscriptionExpiry(subscription.id);
-      return { ok: true };
-    }
-
-    return { ok: false };
+  /** Registra um Payment sem duplicar (mesma providerChargeId só entra uma vez). */
+  private async recordPayment(
+    subscriptionId: string,
+    data: { providerChargeId: string; amount: number; status: PaymentStatus; method: string }
+  ) {
+    const existing = await this.prisma.payment.findFirst({ where: { subscriptionId, providerChargeId: data.providerChargeId } });
+    if (existing) return existing;
+    return this.prisma.payment.create({
+      data: { subscriptionId, provider: this.stripeProvider.name, ...data },
+    });
   }
 }

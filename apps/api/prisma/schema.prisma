@@ -37,7 +37,7 @@ enum SubscriptionStatus {
 }
 
 enum PaymentProviderName {
-  MERCADOPAGO
+  STRIPE
 }
 
 enum PaymentStatus {
@@ -97,6 +97,7 @@ model User {
   role         Role      @default(CLIENT)
   consentedAt  DateTime?
   pushToken    String? // FCM — estrutura pronta, ativação em fase posterior (escopo.md §13.0)
+  stripeCustomerId String? @unique // id do Customer no Stripe — criado sob demanda no checkout
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -148,8 +149,8 @@ model Subscription {
   coupon           Coupon?            @relation(fields: [couponId], references: [id])
   startedAt        DateTime?
   currentPeriodEnd DateTime?
-  // Id da assinatura (preapproval) no Mercado Pago — só existe pra pagamento com cartão (recorrente).
-  mpPreapprovalId  String?            @unique
+  // Id da assinatura no Stripe (Subscription) — só existe pra pagamento com cartão (recorrente).
+  stripeSubscriptionId String?        @unique
   createdAt        DateTime           @default(now())
 
   payments Payment[]

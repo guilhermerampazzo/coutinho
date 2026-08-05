@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional, IsString } from "class-validator";
+import { IsIn, IsOptional, IsString } from "class-validator";
 import { PlanCode, Period } from "@prisma/client";
 
 export class CheckoutDto {
@@ -14,22 +14,4 @@ export class CheckoutDto {
 
   @IsIn(["pix", "cartao"])
   method!: "pix" | "cartao";
-
-  // Preenchidos só quando o gateway ativo é o Mercado Pago e o método é cartão/Google Pay —
-  // token gerado no navegador pelo SDK do MP (Payment Brick), nunca dado de cartão em texto puro.
-  @IsOptional()
-  @IsString()
-  token?: string;
-
-  @IsOptional()
-  @IsString()
-  paymentMethodId?: string;
-
-  @IsOptional()
-  @IsInt()
-  installments?: number;
-
-  @IsOptional()
-  @IsString()
-  payerDocNumber?: string;
 }

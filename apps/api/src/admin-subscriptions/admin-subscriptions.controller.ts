@@ -2,8 +2,7 @@ import { Body, Controller, Get, NotFoundException, Param, Patch, Req, UseGuards 
 import { ProfessionalGuard } from "../auth/professional.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
-import { RemindersQueueService } from "../reminders/reminders-queue.service";
-import { MercadoPagoPaymentProvider } from "../payments/providers/mercadopago-payment.provider";
+import { StripePaymentProvider } from "../payments/providers/stripe-payment.provider";
 import { UpdateSubscriptionDto } from "./dto/update-subscription.dto";
 
 @Controller("admin/subscriptions")
@@ -12,8 +11,7 @@ export class AdminSubscriptionsController {
   constructor(
     private prisma: PrismaService,
     private audit: AuditService,
-    private reminders: RemindersQueueService,
-    private mercadoPago: MercadoPagoPaymentProvider
+    private stripe: StripePaymentProvider
   ) {}
 
   @Get()
@@ -38,9 +36,10 @@ export class AdminSubscriptionsController {
     this.audit.log(req.user.userId, "UPDATE", "Subscription", subscription.id, { ...dto });
 
     const deactivating = dto.status && dto.status !== "ACTIVE" && before?.status === "ACTIVE";
-    if (deactivating && before?.mpPreapprovalId) {
-      await this.mercadoPago.cancelSubscription(before.mpPreapprovalId);
-      await this.reminders.cancelSubscriptionExpiry(id);
+    if (deactivating && before?.stripeSubscriptionId) {
+      // Cancela no Stripe — o webhook customer.subscription.deleted chega depois, mas a assinatura
+      // já está CANCELED aqui, então o webhook só é ignorado (status != ACTIVE).
+      await this.stripe.cancelSubscription(before.stripeSubscriptionId);
     }
     return subscription;
   }

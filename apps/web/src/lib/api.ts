@@ -65,14 +65,34 @@ export const couponsApi = {
   validate: (code: string) => request<{ code: string; percentOff: number }>("/coupons/validate", { method: "POST", body: JSON.stringify({ code }) }),
 };
 
+export interface PixPaymentInfo {
+  qrCode: string;
+  qrCodeImageUrl: string;
+  hostedInstructionsUrl?: string;
+  /** Timestamp (segundos) em que o QR expira. */
+  expiresAt: number;
+}
+
 export interface CheckoutResponse {
   subscriptionId: string;
-  paymentId: string;
-  status: "PENDING" | "APPROVED" | "FAILED";
-  checkoutUrl?: string;
-  pixQrCode?: string;
-  pixQrCodeImage?: string;
+  method: "pix" | "cartao";
   amount: number;
+  /** Cartão (assinatura recorrente) — monta o Embedded Checkout com este client_secret. */
+  clientSecret?: string;
+  /** PIX customizado — QR para exibir na própria página. */
+  pix?: PixPaymentInfo;
+}
+
+export type PixStatus = "pending" | "paid" | "expired" | "failed";
+
+export interface PixStatusResponse {
+  status: PixStatus;
+  expiresAt?: number;
+  amount?: number;
+  /** Preenchidos quando ainda pendente — permitem retomar o pagamento após recarregar a página. */
+  qrCode?: string;
+  qrCodeImageUrl?: string;
+  hostedInstructionsUrl?: string;
 }
 
 export interface Anamnesis {
@@ -255,7 +275,7 @@ export const adminPlansApi = {
 };
 
 export interface CheckoutConfig {
-  provider: "MERCADOPAGO";
+  provider: "STRIPE";
   publicKey?: string;
 }
 
@@ -266,12 +286,14 @@ export const paymentsApi = {
       period: string;
       couponCode?: string;
       method: "pix" | "cartao";
-      token?: string;
-      paymentMethodId?: string;
-      installments?: number;
-      payerDocNumber?: string;
     },
     token: string
   ) => request<CheckoutResponse>("/checkout", { method: "POST", body: JSON.stringify(data) }, token),
   checkoutConfig: () => request<CheckoutConfig>("/payments/checkout-config"),
+  /** Status do PIX (polling) — também ativa a assinatura se o pagamento já foi pago (falha segura). */
+  pixStatus: (subscriptionId: string, token: string) =>
+    request<PixStatusResponse>(`/payments/status/${subscriptionId}`, {}, token),
+  /** Gera um novo QR PIX para a mesma assinatura pendente (QR expirado). */
+  regeneratePix: (subscriptionId: string, token: string) =>
+    request<CheckoutResponse>(`/payments/pix/regenerate/${subscriptionId}`, { method: "POST" }, token),
 };

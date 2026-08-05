@@ -1,50 +1,57 @@
-import { Body, Controller, Get, Headers, Post, Query, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
-import { createHmac } from "node:crypto";
+import { Body, Controller, Get, Headers, Param, Post, RawBodyRequest, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
+import type { Request } from "express";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { PaymentsService } from "./payments.service";
+import { StripePaymentProvider } from "./providers/stripe-payment.provider";
 import { CheckoutDto } from "./dto/checkout.dto";
 
 @Controller()
 export class PaymentsController {
-  constructor(private paymentsService: PaymentsService) {}
+  constructor(private paymentsService: PaymentsService, private stripeProvider: StripePaymentProvider) {}
 
+  /** Cria a Subscription + PaymentIntent de PIX ou Checkout Session embutida do cartão. */
   @Post("checkout")
   @UseGuards(JwtAuthGuard)
   checkout(@Req() req: any, @Body() dto: CheckoutDto) {
     return this.paymentsService.checkout(req.user.userId, dto);
   }
 
-  /** Endpoint público — devolve a public key do Mercado Pago (nunca o access token). */
+  /**
+   * Status do PIX para o front fazer polling (a cada ~4s). Também é o FALHA SEGURA: se o pagamento
+   * já foi pago no Stripe mas o webhook não chegou, ativa a assinatura aqui mesmo — garante que o
+   * cliente nunca fique "pagou mas continua bloqueado".
+   */
+  @Get("payments/status/:subscriptionId")
+  @UseGuards(JwtAuthGuard)
+  pixStatus(@Req() req: any, @Param("subscriptionId") subscriptionId: string) {
+    return this.paymentsService.getPixStatus(req.user.userId, subscriptionId);
+  }
+
+  /** Gera um novo QR PIX para a mesma assinatura ainda pendente (QR expirado). */
+  @Post("payments/pix/regenerate/:subscriptionId")
+  @UseGuards(JwtAuthGuard)
+  regeneratePix(@Req() req: any, @Param("subscriptionId") subscriptionId: string) {
+    return this.paymentsService.regeneratePix(req.user.userId, subscriptionId);
+  }
+
+  /** Endpoint público — devolve a publishable key do Stripe (nunca o secret key). */
   @Get("payments/checkout-config")
   checkoutConfig() {
-    return { provider: "MERCADOPAGO", publicKey: process.env.MERCADOPAGO_PUBLIC_KEY };
+    return { provider: "STRIPE", publicKey: process.env.STRIPE_PUBLISHABLE_KEY };
   }
 
   /**
-   * Webhook das cobranças recorrentes (assinatura/cartão). Assinado pelo Mercado Pago via
-   * `x-signature` (ts + hash HMAC-SHA256) — configurar `MERCADOPAGO_WEBHOOK_SECRET` com o mesmo
-   * segredo cadastrado no painel do MP (Suas integrações > Webhooks). Sem o env configurado,
-   * recusa por padrão, igual ao antigo webhook do Asaas.
+   * Webhook do Stripe (assinaturas, PIX, cobranças recorrentes). Assinado com o header
+   * `stripe-signature` — configurar `STRIPE_WEBHOOK_SECRET` (Stripe Dashboard > Developers >
+   * Webhooks). Sem o env configurado, recusa por padrão. O body precisa ser bruto (rawBody),
+   * pois a assinatura é calculada sobre o payload exato.
    */
-  @Post("payments/webhook/mercadopago")
-  webhook(
-    @Headers("x-signature") signature: string | undefined,
-    @Headers("x-request-id") requestId: string | undefined,
-    @Query("data.id") dataId: string | undefined,
-    @Body() payload: { type?: string; action?: string }
-  ) {
-    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
-    if (!secret || !signature || !requestId || !dataId) {
+  @Post("payments/webhook/stripe")
+  webhook(@Req() req: RawBodyRequest<Request>, @Headers("stripe-signature") signature: string | undefined) {
+    if (!signature) {
       throw new UnauthorizedException("Assinatura do webhook inválida.");
     }
-    const parts = Object.fromEntries(signature.split(",").map((p) => p.trim().split("=")) as [string, string][]);
-    const manifest = `id:${dataId.toLowerCase()};request-id:${requestId};ts:${parts.ts};`;
-    const expected = createHmac("sha256", secret).update(manifest).digest("hex");
-    if (expected !== parts.v1) {
-      throw new UnauthorizedException("Assinatura do webhook inválida.");
-    }
-
-    const topic = payload.type ?? "";
-    return this.paymentsService.handleMercadoPagoWebhook(topic, dataId);
+    const event = this.stripeProvider.constructEvent(req.rawBody ?? Buffer.from(""), signature);
+    return this.paymentsService.handleStripeWebhook(event);
   }
 }
