@@ -531,9 +531,7 @@ export function CheckoutPage() {
     <main style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "var(--sp-6)" }}>
       {/* Menu mínimo durante o checkout (item 8) */}
       <header style={{ width: "100%", maxWidth: 480, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--sp-6)" }}>
-        <span className="display" style={{ fontSize: "var(--fs-title-lg)" }}>
-          CoutHealth
-        </span>
+        <img src="/logo.webp" alt="CoutHealth" style={{ height: 30, width: "auto", display: "block" }} />
         <a href={SITE_URL} style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)" }}>
           ← Voltar ao site
         </a>

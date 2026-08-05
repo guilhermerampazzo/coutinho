@@ -38,10 +38,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--sp-4)", textAlign: "center" }}>
-          <svg width="36" height="36" viewBox="0 0 30 30">
-            <path d="M24 8a11 11 0 1 0 0 14" stroke="var(--text-primary)" strokeWidth={3} fill="none" strokeLinecap="round" />
-            <circle cx="15" cy="15" r="4.5" fill="var(--accent)" />
-          </svg>
+          <img src="/logo.webp" alt="CoutHealth" style={{ height: 40, width: "auto", display: "block" }} />
           <div>
             <h1 className="display" style={{ fontSize: "1.75rem", letterSpacing: "-0.02em", margin: 0 }}>
               {title}

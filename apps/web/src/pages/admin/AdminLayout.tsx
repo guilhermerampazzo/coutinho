@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { ContinuityRing } from "@couthealth/ui";
 
 const links = [
   { to: "/admin", label: "Clientes", end: true },
@@ -67,15 +66,11 @@ export function AdminLayout({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", padding: "0 var(--sp-6)" }}>
-          <ContinuityRing progress={0.6} size={26} strokeWidth={3} />
-          <span className="display" style={{ fontWeight: 700, fontSize: "1rem", color: "var(--accent)" }}>
-            CoutHealth
-          </span>
+          <img src="/logo.webp" alt="CoutHealth" style={{ height: 28, width: "auto", display: "block" }} />
           <span style={{ fontSize: "0.6875rem", color: "var(--text-tertiary)", marginLeft: "auto", letterSpacing: "0.06em" }}>
             ADMIN
           </span>
-        </div>
-        <nav style={{ display: "flex", flexDirection: "column" }}>
+        </div>        <nav style={{ display: "flex", flexDirection: "column" }}>
           {links.map((link) => (
             <NavLink
               key={link.to}
@@ -109,9 +104,7 @@ export function AdminLayout({
           >
             ☰
           </button>
-          <span className="display" style={{ fontWeight: 700, fontSize: "0.9375rem", color: "var(--accent)" }}>
-            CoutHealth Admin
-          </span>
+          <img src="/logo.webp" alt="CoutHealth" style={{ height: 24, width: "auto", display: "block" }} />
           <span style={{ width: 24 }} />
         </div>
         {title && (

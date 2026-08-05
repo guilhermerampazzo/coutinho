@@ -1,6 +1,5 @@
 import { useEffect, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { ContinuityRing } from "@couthealth/ui";
 import { useAuth } from "../../lib/auth";
 import { initPushNotifications } from "../../lib/push";
 
@@ -83,10 +82,7 @@ export function ClientLayout({ title, children }: { title?: string; children: Re
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 var(--sp-6)", marginBottom: "var(--sp-8)" }}>
-          <ContinuityRing progress={0.6} size={26} strokeWidth={3} />
-          <span className="display" style={{ fontWeight: 700, fontSize: "1rem", color: "var(--accent)", letterSpacing: "0.02em" }}>
-            COUTINHO
-          </span>
+          <img src="/logo.webp" alt="CoutHealth" style={{ height: 28, width: "auto", display: "block" }} />
         </div>
         <nav style={{ display: "flex", flexDirection: "column" }}>
           {links.map((link) => (
