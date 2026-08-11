@@ -217,7 +217,7 @@ const FAQ_MINI = [
 
 export function CheckoutPage() {
   const [searchParams] = useSearchParams();
-  const { accessToken, user } = useAuth();
+  const { accessToken, user, refreshUser } = useAuth();
   const navigate = useNavigate();
 
   const [method, setMethod] = useState<Method>("pix");
@@ -336,7 +336,9 @@ export function CheckoutPage() {
 
   // ---------- PIX: inicializa (cria ou retoma) ----------
   useEffect(() => {
-    if (method !== "pix" || !user || !accessToken) return;
+    // Voltou do Stripe com ?success=1 (cartão pago): NÃO criar PIX — isso deixaria uma
+    // Subscription PENDING órfã e um PaymentIntent fantasma no Stripe (bug visto no teste).
+    if (method !== "pix" || !user || !accessToken || success) return;
     if (pixInitRef.current) return;
     pixInitRef.current = true;
     void resumeOrCreate();
@@ -381,17 +383,41 @@ export function CheckoutPage() {
   // ---------- PIX: confirmação + redirecionamento (3...2...1) ----------
   useEffect(() => {
     if (pix.phase !== "paid") return;
+    let cancelled = false;
     let s = 3;
+    let tries = 0;
     setRedirectSec(s);
-    const t = setInterval(() => {
-      s -= 1;
-      setRedirectSec(Math.max(0, s));
-      if (s <= 0) {
-        clearInterval(t);
-        navigate("/anamnese", { replace: true });
+
+    async function waitForAccess() {
+      // O backend ativa a assinatura antes de responder "paid" (fallback do getPixStatus), mas o
+      // `user` do contexto ainda não sabe disso — sem atualizá-lo, o ProtectedRoute devolveria o
+      // cliente para /planos?motivo=novo em vez de liberar a anamnese. Confirmamos ao vivo aqui.
+      const me = await refreshUser();
+      if (cancelled) return;
+      if (!me?.hasActiveSubscription) {
+        tries += 1;
+        if (tries < 10) {
+          setTimeout(waitForAccess, 1000);
+          return;
+        }
+        // Não conseguiu confirmar — volta ao estado pendente para o usuário tentar manualmente.
+        setPix((prev) => (prev.phase === "paid" ? { phase: "pending" } : prev));
+        return;
       }
-    }, 1000);
-    return () => clearInterval(t);
+      const t = setInterval(() => {
+        s -= 1;
+        setRedirectSec(Math.max(0, s));
+        if (s <= 0) {
+          clearInterval(t);
+          navigate("/anamnese", { replace: true });
+        }
+      }, 1000);
+    }
+    void waitForAccess();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pix.phase]);
 
@@ -459,8 +485,10 @@ export function CheckoutPage() {
     const poll = setInterval(async () => {
       attempts++;
       try {
-        const me = await authApi.me(accessToken);
-        if (me.hasActiveSubscription) {
+        // refreshUser também atualiza o contexto — sem isso, o ProtectedRoute ainda veria o
+        // usuário "sem assinatura" e devolveria para /planos ao navegar para a anamnese.
+        const me = await refreshUser();
+        if (me?.hasActiveSubscription) {
           clearInterval(poll);
           navigate("/anamnese", { replace: true });
           return;

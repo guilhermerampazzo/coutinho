@@ -10,6 +10,12 @@ interface AuthContextValue {
   loading: boolean;
   setSession: (user: AuthUser, accessToken: string, refreshToken: string) => void;
   logout: () => void;
+  /**
+   * Busca /auth/me com o token atual e atualiza o `user` no contexto (sem trocar tokens).
+   * Usado depois do pagamento: o `hasActiveSubscription` do contexto fica stale (o usuário
+   * foi criado sem assinatura) e o ProtectedRoute redirecionaria de volta para /planos.
+   */
+  refreshUser: () => Promise<AuthUser | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -50,7 +56,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
-  return <AuthContext.Provider value={{ user, accessToken, loading, setSession, logout }}>{children}</AuthContext.Provider>;
+  async function refreshUser() {
+    const token = localStorage.getItem(ACCESS_KEY);
+    if (!token) return null;
+    try {
+      const me = await authApi.me(token);
+      setUser(me);
+      return me;
+    } catch {
+      return null;
+    }
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, accessToken, loading, setSession, logout, refreshUser }}>{children}</AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
