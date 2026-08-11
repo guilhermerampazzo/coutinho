@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { ProfessionalGuard } from "../auth/professional.guard";
 import { AdminClientsService } from "./admin-clients.service";
 import { CreateMealPlanDto } from "./dto/meal-plan.dto";
 import { CreateWorkoutDto } from "./dto/workout.dto";
+import { CreateClientDto } from "./dto/create-client.dto";
 
 @Controller("admin")
 @UseGuards(ProfessionalGuard)
@@ -12,6 +13,18 @@ export class AdminClientsController {
   @Get("clients")
   listClients() {
     return this.service.listClients();
+  }
+
+  /** Cadastro manual de cliente pela recepção (organização do painel). */
+  @Post("clients")
+  createClient(@Body() dto: CreateClientDto, @Req() req: any) {
+    return this.service.createClient(dto, req.user.userId);
+  }
+
+  /** Remove o cadastro (anonimiza + cancela cobranças ativas) — a conta some da lista. */
+  @Delete("clients/:id")
+  removeClient(@Param("id") id: string, @Req() req: any) {
+    return this.service.removeClient(id, req.user.userId);
   }
 
   @Get("clients/:id")

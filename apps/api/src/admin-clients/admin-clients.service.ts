@@ -1,17 +1,28 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Role } from "@prisma/client";
+import * as argon2 from "argon2";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
+import { StripePaymentProvider } from "../payments/providers/stripe-payment.provider";
 import { CreateMealPlanDto } from "./dto/meal-plan.dto";
 import { CreateWorkoutDto } from "./dto/workout.dto";
+import { CreateClientDto } from "./dto/create-client.dto";
 
 @Injectable()
 export class AdminClientsService {
-  constructor(private prisma: PrismaService, private audit: AuditService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+    private stripeProvider: StripePaymentProvider
+  ) {}
 
   listClients() {
     return this.prisma.user.findMany({
-      where: { role: Role.CLIENT },
+      where: {
+        role: Role.CLIENT,
+        // Contas removidas (anonimizadas) somem da lista — organização do painel.
+        email: { not: { startsWith: "deleted-" } },
+      },
       select: {
         id: true,
         name: true,
@@ -22,6 +33,63 @@ export class AdminClientsService {
       },
       orderBy: { createdAt: "desc" },
     });
+  }
+
+  /**
+   * Cadastro manual de cliente (recepção): o profissional informa nome/e-mail/senha inicial e
+   * repassa o acesso ao cliente. O consentimento LGPD é registrado no momento do cadastro pelo
+   * profissional (assinatura de contrato em papel na recepção) — trilha de auditoria incluída.
+   */
+  async createClient(dto: CreateClientDto, professionalId: string) {
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (existing) throw new ConflictException("Já existe uma conta com este e-mail.");
+
+    const user = await this.prisma.user.create({
+      data: {
+        name: dto.name,
+        email: dto.email,
+        passwordHash: await argon2.hash(dto.password),
+        role: Role.CLIENT,
+        consentedAt: new Date(),
+      },
+    });
+    this.audit.log(professionalId, "CREATE_CLIENT", "User", user.id, { email: dto.email, name: dto.name });
+    return { id: user.id, name: user.name, email: user.email };
+  }
+
+  /**
+   * Remoção de cadastro pelo admin (organização do painel): anonimiza a conta (LGPD art. 16 —
+   * histórico de pagamentos/planos retido sem identificar a pessoa), cancela assinaturas ativas
+   * (inclusive a cobrança recorrente no Stripe) e a conta some da lista de clientes.
+   */
+  async removeClient(id: string, professionalId: string) {
+    const client = await this.prisma.user.findUnique({ where: { id, role: Role.CLIENT } });
+    if (!client) throw new NotFoundException("Cliente não encontrado.");
+
+    const activeSubs = await this.prisma.subscription.findMany({ where: { userId: id, status: "ACTIVE" } });
+    for (const sub of activeSubs) {
+      if (sub.stripeSubscriptionId) {
+        await this.stripeProvider.cancelSubscription(sub.stripeSubscriptionId).catch(() => undefined);
+      }
+      await this.prisma.subscription.update({
+        where: { id: sub.id },
+        data: { status: "CANCELED", currentPeriodEnd: new Date() },
+      });
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: {
+        name: "Conta removida",
+        email: `deleted-${id}@couthealth.invalid`,
+        passwordHash: null,
+        googleId: null,
+        appleId: null,
+        pushToken: null,
+      },
+    });
+    this.audit.log(professionalId, "REMOVE_CLIENT", "User", id, { email: client.email });
+    return { ok: true };
   }
 
   async getClientDetail(id: string) {

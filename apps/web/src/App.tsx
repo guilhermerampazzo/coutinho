@@ -9,7 +9,6 @@ import { AnamnesisPage } from "./pages/anamnesis/AnamnesisPage";
 import { DashboardPage } from "./pages/client/DashboardPage";
 import { NutritionPage } from "./pages/client/NutritionPage";
 import { WorkoutPage } from "./pages/client/WorkoutPage";
-import { LibraryPage } from "./pages/client/LibraryPage";
 import { MessagesPage } from "./pages/client/MessagesPage";
 import { NotificationsPage } from "./pages/client/NotificationsPage";
 import { EvolutionPage } from "./pages/client/EvolutionPage";
@@ -19,7 +18,6 @@ import { AdminDashboardPage } from "./pages/admin/AdminDashboardPage";
 import { AdminClientDetailPage } from "./pages/admin/AdminClientDetailPage";
 import { AdminFoodsPage } from "./pages/admin/AdminFoodsPage";
 import { AdminExercisesPage } from "./pages/admin/AdminExercisesPage";
-import { AdminLibraryPage } from "./pages/admin/AdminLibraryPage";
 import { AdminNotificationsPage } from "./pages/admin/AdminNotificationsPage";
 import { AdminCouponsPage } from "./pages/admin/AdminCouponsPage";
 import { AdminSubscriptionsPage } from "./pages/admin/AdminSubscriptionsPage";
@@ -86,14 +84,6 @@ export function App() {
         element={
           <ProtectedRoute requireSubscription>
             <WorkoutPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/app/biblioteca"
-        element={
-          <ProtectedRoute requireSubscription>
-            <LibraryPage />
           </ProtectedRoute>
         }
       />
@@ -167,14 +157,6 @@ export function App() {
         element={
           <ProtectedRoute role="PROFESSIONAL">
             <AdminExercisesPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/biblioteca"
-        element={
-          <ProtectedRoute role="PROFESSIONAL">
-            <AdminLibraryPage />
           </ProtectedRoute>
         }
       />

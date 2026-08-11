@@ -12,7 +12,6 @@ import { AnamnesisModule } from "./anamnesis/anamnesis.module";
 import { AssessmentsModule } from "./assessments/assessments.module";
 import { FoodsModule } from "./foods/foods.module";
 import { ExercisesModule } from "./exercises/exercises.module";
-import { LibraryModule } from "./library/library.module";
 import { MessagesModule } from "./messages/messages.module";
 import { AdminClientsModule } from "./admin-clients/admin-clients.module";
 import { NotificationsModule } from "./notifications/notifications.module";
@@ -37,7 +36,6 @@ import { AuditModule } from "./audit/audit.module";
     AssessmentsModule,
     FoodsModule,
     ExercisesModule,
-    LibraryModule,
     MessagesModule,
     AdminClientsModule,
     NotificationsModule,

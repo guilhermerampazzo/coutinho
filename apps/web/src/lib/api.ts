@@ -124,6 +124,11 @@ export interface ClientListItem {
 
 export const adminApi = {
   listClients: (token: string) => request<ClientListItem[]>("/admin/clients", {}, token),
+  /** Cadastro manual de cliente pela recepção. */
+  createClient: (data: { name: string; email: string; password: string }, token: string) =>
+    request<{ id: string; name: string; email: string }>("/admin/clients", { method: "POST", body: JSON.stringify(data) }, token),
+  /** Remove o cadastro (anonimiza + cancela cobranças) — a conta some da lista. */
+  removeClient: (id: string, token: string) => request<{ ok: boolean }>(`/admin/clients/${id}`, { method: "DELETE" }, token),
   clientDetail: (id: string, token: string) => request<any>(`/admin/clients/${id}`, {}, token),
   createMealPlan: (clientId: string, data: { meals: any[] }, token: string) =>
     request<any>(`/admin/clients/${clientId}/meal-plan`, { method: "POST", body: JSON.stringify(data) }, token),
@@ -172,24 +177,6 @@ export const exercisesApi = {
   update: (id: string, data: Partial<ExerciseItem>, token: string) =>
     request<ExerciseItem>(`/exercises/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
   remove: (id: string, token: string) => request<void>(`/exercises/${id}`, { method: "DELETE" }, token),
-};
-
-export interface LibraryItem {
-  id: string;
-  type: "RECEITA" | "ARTIGO" | "VIDEO" | "MATERIAL";
-  title: string;
-  body?: string;
-  mediaUrl?: string;
-  publishedAt: string | null;
-}
-
-export const libraryApi = {
-  listPublished: (token: string) => request<LibraryItem[]>("/library", {}, token),
-  listAll: (token: string) => request<LibraryItem[]>("/library/all", {}, token),
-  create: (data: Omit<LibraryItem, "id" | "publishedAt">, token: string) =>
-    request<LibraryItem>("/library", { method: "POST", body: JSON.stringify(data) }, token),
-  publish: (id: string, token: string) => request<LibraryItem>(`/library/${id}/publish`, { method: "POST" }, token),
-  remove: (id: string, token: string) => request<void>(`/library/${id}`, { method: "DELETE" }, token),
 };
 
 export const clientApi = {

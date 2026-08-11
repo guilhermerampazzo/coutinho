@@ -5,7 +5,6 @@ const links = [
   { to: "/admin", label: "Clientes", end: true },
   { to: "/admin/alimentos", label: "Banco de alimentos" },
   { to: "/admin/exercicios", label: "Banco de exercícios" },
-  { to: "/admin/biblioteca", label: "Biblioteca" },
   { to: "/admin/notificacoes", label: "Notificações" },
   { to: "/admin/cupons", label: "Cupons" },
   { to: "/admin/assinaturas", label: "Planos & Assinaturas" },
