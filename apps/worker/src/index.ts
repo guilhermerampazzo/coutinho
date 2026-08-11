@@ -25,6 +25,18 @@ async function handleAnamnesisReminder(userId: string) {
     },
   });
   console.log(`[worker] lembrete de anamnese criado para o usuário ${userId}`);
+
+  // Fluxo de entrada (pedido do cliente): lembretes automáticos se repetem a cada 24h
+  // ATÉ a anamnese ser concluída — o submit() (API) cancela o job via `anamnesis-<userId>`.
+  // Reagenda com o mesmo jobId (remove + add, padrão do RemindersQueueService) para o
+  // próximo ciclo; se o usuário enviar a anamnese antes, o cancelamento continua valendo.
+  const jobId = `anamnesis-${userId}`;
+  await remindersQueue.remove(jobId).catch(() => undefined);
+  await remindersQueue.add(
+    "anamnesis-incomplete",
+    { userId },
+    { jobId, delay: 24 * 60 * 60 * 1000, removeOnComplete: true, removeOnFail: true }
+  );
 }
 
 /**

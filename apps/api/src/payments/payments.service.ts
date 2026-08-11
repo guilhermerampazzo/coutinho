@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Period, PlanCode, PaymentStatus } from "@prisma/client";
 import Stripe from "stripe";
 import { PrismaService } from "../prisma/prisma.service";
+import { RemindersQueueService } from "../reminders/reminders-queue.service";
 import { StripePaymentProvider } from "./providers/stripe-payment.provider";
 import type { PixPaymentInfo } from "./payment-provider.interface";
 import { CheckoutDto } from "./dto/checkout.dto";
@@ -25,7 +26,11 @@ const PIX_EXPIRATION_MS = 30 * 60 * 1000;
 
 @Injectable()
 export class PaymentsService {
-  constructor(private prisma: PrismaService, private stripeProvider: StripePaymentProvider) {}
+  constructor(
+    private prisma: PrismaService,
+    private stripeProvider: StripePaymentProvider,
+    private reminders: RemindersQueueService
+  ) {}
 
   /**
    * Cria a Subscription (PENDING) e uma Checkout Session embutida do Stripe.
@@ -381,7 +386,38 @@ export class PaymentsService {
       where: { id: subscriptionId },
       data: { status: "ACTIVE", startedAt: new Date(), currentPeriodEnd },
     });
+
+    // Fluxo de entrada (pedido do cliente): assim que o pagamento é confirmado, o cliente
+    // recebe a solicitação de anamnese — notificação na plataforma + primeiro lembrete automático.
+    await this.notifyAnamnesisIfPending(current.userId);
     return true;
+  }
+
+  /**
+   * Se o usuário ainda não concluiu a anamnese (nunca criou ou está em RASCUNHO), cria a
+   * notificação "Complete sua anamnese" (sem duplicar: só se não houver uma pendente não lida)
+   * e agenda o primeiro lembrete — o worker repete a cada 24h até a anamnese ser enviada.
+   */
+  private async notifyAnamnesisIfPending(userId: string) {
+    const anamnesis = await this.prisma.anamnesis.findUnique({ where: { userId } });
+    const pending = !anamnesis || anamnesis.status === "RASCUNHO";
+    if (!pending) return;
+
+    const existing = await this.prisma.notification.findFirst({
+      where: { userId, title: "Complete sua anamnese", readAt: null },
+    });
+    if (!existing) {
+      await this.prisma.notification.create({
+        data: {
+          userId,
+          type: "PERSONALIZADA",
+          title: "Complete sua anamnese",
+          body: "Sua assinatura está ativa! Preencha sua anamnese para que a equipe monte seu plano personalizado.",
+          sentAt: new Date(),
+        },
+      });
+    }
+    await this.reminders.scheduleAnamnesisReminder(userId);
   }
 
   /** Registra um Payment sem duplicar (mesma providerChargeId só entra uma vez). */
