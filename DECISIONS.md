@@ -140,3 +140,68 @@
 - Cartão continua no **Embedded Checkout** (com `?success=1` + polling do `/auth/me`).
 - ⚠️ O **`expires_at` do PIX foi fixado em 30 minutos** (constante `PIX_EXPIRATION_MS`) — se o cliente quiser outro prazo, é uma linha.
 - **Validação**: build OK api/web. Fluxo real ainda depende das chaves Stripe + webhook configurado (listado acima).
+
+## 2026-08-11 — Anamnese não "engatilha" após cadastro + pagamento (contexto de auth stale)
+
+**Bug reportado pelo cliente:** após cadastro e pagamento, a anamnese não aparece e o cliente "não tem acesso".
+
+**Causa raiz:** o `AuthContext.user` fica **stale** depois do pagamento. O usuário nasce sem assinatura (`hasActiveSubscription: false` no contexto); ao pagar:
+- **PIX**: o polling detecta `paid` e navega para `/anamnese` **sem atualizar o contexto** → `ProtectedRoute requireSubscription` vê o `user` antigo (sem assinatura) e redireciona de volta para `/planos?motivo=novo` — o cliente paga e volta para os planos, em loop.
+- **Cartão**: o polling de `?success=1` chamava `authApi.me()` e navegava, mas **também sem gravar no contexto** → mesmo redirect.
+- Só "funcionava" com um reload da página (o `AuthProvider` refaz `/auth/me` no mount) — por isso parecia intermitente.
+
+**Correção (3 camadas, `apps/web`):**
+1. `lib/auth.tsx`: novo `refreshUser()` no `AuthProvider` — busca `/auth/me` com o token atual e atualiza o `user` do contexto (sem trocar tokens).
+2. `CheckoutPage.tsx`: antes de redirecionar para `/anamnese`, confirma a liberação ao vivo via `refreshUser()` — PIX com retries (até 10×1s, voltando ao estado pendente se não confirmar) e cartão no polling do `?success=1`.
+3. `ProtectedRoute.tsx` (defesa em profundidade): quando o contexto diz "sem assinatura", faz uma **confirmação ao vivo** (uma vez por montagem, renderizando null durante) antes de redirecionar para `/planos` — cobre qualquer outro caminho com contexto stale (webhook ativando enquanto o usuário navega, abas abertas etc.).
+
+**Bug adicional encontrado e corrigido no mesmo fluxo:** o init do PIX no `CheckoutPage` rodava mesmo com `?success=1` (retorno do cartão) — criava uma `Subscription` PENDING órfã + PaymentIntent fantasma no Stripe a cada volta do Embedded Checkout. Agora o init do PIX é pulado quando `success=1`.
+
+**Validação (browser real, API stubada):** app web buildado + stub da API simulando o backend (login, `/auth/me` com flag `paid` alternável, checkout PIX com ativação no status, webhook manual). Percorridos os dois fluxos ponta a ponta: **PIX** (planos → checkout → QR → "pago" → ativação → anamnese 1/9 renderizada) e **cartão** (`?success=1` → cadastro → sem criação de PIX (`checkouts: 0`) → ativação via webhook simulado → polling → anamnese). Antes da correção, ambos terminavam em `/planos?motivo=novo`.
+
+## 2026-08-11 — Fluxo de entrada do cliente (pedido do cliente: planos → pagamento → conta → anamnese → análise → publicação)
+
+O cliente descreveu o fluxo de entrada completo. Mapeamento do que já existia vs. o que foi implementado:
+
+| Etapa do fluxo | Estado |
+|---|---|
+| Escolha do plano (Essencial/Plus/Elite + período) | ✅ já existia |
+| Pagamento (PIX customizado + cartão via Embedded Checkout) | ✅ já existia |
+| **Apple Pay / Google Pay** | ⚠️ **sem código**: o Embedded Checkout do Stripe exibe Apple Pay/Google Pay automaticamente quando habilitados no **Dashboard do Stripe** (Payment Method Configuration) e com o domínio verificado — configuração, não implementação |
+| Cadastro da conta + ativação automática pós-pagamento | ✅ já existia (conta criada no checkout com **consentimento LGPD** e ATIVADA automaticamente após o pagamento; login/cadastro Google e Apple já implementados) |
+| Anamnese: solicitação automática + **notificação** | 🆕 **implementado** — `activateSubscription` agora chama `notifyAnamnesisIfPending`: se a anamnese não está concluída (nunca criada ou RASCUNHO), cria a notificação "Complete sua anamnese" (sem duplicar se já houver pendente não lida) e agenda o **primeiro** lembrete |
+| Anamnese pendente: **lembretes repetidos até concluir** | 🆕 **implementado** — o worker, ao disparar o lembrete com anamnese ainda RASCUNHO, **reagenda +24h** (mesmo jobId `anamnesis-<userId>`, padrão remove+add do `RemindersQueueService`); o `submit()` continua cancelando o job. Antes, o lembrete só existia se o usuário tivesse interagido (PATCH) e era one-shot |
+| Anamnese pendente visível na plataforma | 🆕 **implementado** — banner amarelo "Complete sua anamnese" + CTA "Preencher agora" no topo do `/app` (dashboard) quando `status === RASCUNHO` |
+| Recebimento automático no painel admin | ✅ já existia (lista de clientes com status da anamnese + detalhe completo) |
+| Análise profissional (IA como apoio, decisão humana) | ✅ processo manual já existente; IA continua sendo camada futura (escopo.md §10) |
+| Publicação + notificação "plano disponível" | ✅ já existia (`PLANO_PUBLICADO` / `TREINO_ATUALIZADO`) |
+
+**Decisão de produto (cadastro pós-pagamento):** o cliente descreveu "a conta é criada após a confirmação do pagamento". Mantido o fluxo atual — conta criada **no checkout** (com consentimento explícito LGPD, obrigatório para dados de saúde) e **ativada automaticamente** quando o pagamento é confirmado. Pagar antes de cadastrar exigiria coletar consentimento de dados de saúde depois do pagamento, o que contraria o escopo.md §9 — o resultado funcional é o mesmo ("conta criada e ativada automaticamente").
+
+**Validação:** `npm run build` completo (API com dist limpo — o `tsc incremental` estava mascarando build parcial, forçado `rm -rf dist + tsbuildinfo`) + **teste de integração em memória** dos 5 cenários da ativação (RASCUNHO → notificação+lembrete; ENVIADA → nada; pendente existente → sem duplicata; sem anamnese → notificação; já ACTIVE → idempotente) + **validação visual no browser** (stub da API): banner "Complete sua anamnese" renderizado no dashboard com contraste OK.
+
+## 2026-08-11 — Ajustes admin: remoção da Biblioteca + cadastro manual de clientes + anamnese detalhada (PDF aprovado)
+
+**1. Biblioteca removida (admin + cliente)** — pedido do cliente: a seção não existe mais em lugar nenhum.
+- Front: rotas `/app/biblioteca` e `/admin/biblioteca` removidas (App.tsx), links de navegação removidos (ClientLayout/AdminLayout), páginas deletadas, `libraryApi` removido do api.ts.
+- Backend: `LibraryModule` removido do app.module, pasta `src/library/` deletada.
+- Schema: `model LibraryContent` + enum `LibraryContentType` removidos dos schemas da API e do worker; migration `20260811090000_remove_library` (DROP TABLE + DROP TYPE). `exerciseLibrary` (banco de exercícios) NÃO foi tocado.
+
+**2. Cadastro manual + remoção de clientes no admin (recepção)** — pedido do cliente ("adicionar e remover cadastros, a fim de organização").
+- `POST /admin/clients`: cria cliente CLIENT com nome/e-mail/senha inicial (argon2), `consentedAt` registrado (consentimento colhido na recepção, trilha de auditoria `CREATE_CLIENT`). O cliente usa e-mail+senha para entrar.
+- `DELETE /admin/clients/:id`: **anonimiza** a conta (LGPD art. 16 — histórico de pagamentos/planos retido sem identificar), cancela assinaturas ACTIVE (inclusive `cancelSubscription` no Stripe para parar a cobrança recorrente) e a conta some da lista (`listClients` filtra `email startsWith deleted-`). Audit `REMOVE_CLIENT`.
+- Front: botão "+ Novo cliente" (formulário inline no header) + botão "Remover" por linha (com `window.confirm` explicando desativação/cancelamento de cobrança). `AdminClientsModule` agora importa `PaymentsModule` (StripePaymentProvider).
+
+**3. Anamnese detalhada (estrutura aprovada no PDF "Anamnese Detalhada")** — redesenho completo da experiência:
+- **6 etapas** (Sobre você / Sua saúde / Sua alimentação / Sua rotina / Seu treino / Sua avaliação), **uma pergunta por tela**, progresso "Etapa X de 6" + anel, intro de conversa por etapa ("Vamos começar pelo mais importante…").
+- **Perguntas condicionais**: gates booleanos novos no schema (`hasDiseases`, `usesMedications`, `hasAllergies`, `hasIntolerances`, `hasNutritionalDeficiencies`, `hadSurgeries`, `hasFamilyHistory`, `hasOrthopedicIssues`, `hasAlteredExams`, `usesSupplements`, `practicesActivity`, `hasBioimpedance`) — o detalhe só aparece se "Sim" (ex.: medicamentos). `smokes`/`drinksAlcohol` já eram Boolean.
+- **Opções prontas**: choice (objetivo com 6 opções incl. `COMPOSICAO_CORPORAL` e `OUTRO` no enum Goal; sono; função intestinal; refeições 2-7+; dias de treino 1-7), chips de alimentos ("Não encontrou algum alimento? Adicione aqui"), sliders (água 0,5-5L; horas de sono 3-12h).
+- **Campos de detalhe novos** (String?): `goalImprove`, `currentDiet`, `foodsAvoided`, `workRoutine`, `mealsOut`, `routineDifficulties`, `sedentarySince`, `trainingHistory`, `enjoyedExercises`, `pain`, `limitations`, `injuries`. Assessment ganhou `heightCm` e `chestCm` (peitoral — pergunta condicionada ao sexo masculino).
+- **Salvamento automático**: PATCH a cada avanço/volta ("Seu progresso foi salvo."), `currentStep` = índice na lista linear de perguntas; retomada exata de onde parou (validado no browser). Rascunho da etapa 6 (avaliação) persiste no localStorage `couthealth:anamnesis-assessment` (criado no submit via `POST /assessments`) — limitação registrada: avaliação só é persistida no envio, por design (campos opcionais, preenchíveis depois em Evolução).
+- **Tela final**: "Tudo certo! … **Você fez a sua parte. Agora é comigo.**"
+- Migration `20260811100000_anamnese_detalhada` (24 colunas na Anamnesis + 2 no Assessment + 2 valores no enum Goal). Admin: `anamnesisLabels` ampliado para exibir todos os campos novos de forma organizada.
+- O worker NÃO recebeu os campos novos (schema duplicado não usa anamnese).
+
+**Validação:** `npm run build` completo limpo (dist/tsbuildinfo apagados — tsc incremental estava mascarando build parcial) + teste de integração da ativação (5 cenários, continua passando) + **validação no browser real (Playwright + API stub)**:
+- Anamnese: percorrida ponta a ponta (etapa 1 → condicional Sim → chips "Arroz, Frango" → slider → tela final) — persistência conferida no stub (`status: ENVIADA`, `mealsPerDay: 4`, `preferredFoods: "Arroz, Frango"`, `trainingDaysPerWeek: 3`, etc.); "Responder depois" + retomada exata confirmadas.
+- Admin: login profissional → lista sem Biblioteca → "+ Novo cliente" (Carlos Pereira criado e listado) → "Remover" (confirm → some da lista; Ana/Bruno intactos).

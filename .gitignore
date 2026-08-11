@@ -35,3 +35,9 @@ planos-renovacao.png
 # Arquivos locais do cliente (orçamento e pasta de alterações) — não vão pro repo
 orc.pdf
 /alteracoes/
+
+# Backups da VPS baixados localmente — contêm o .env de produção e dumps do banco
+.backups-vps/
+
+# Documento do cliente (anamnese detalhada) — dados pessoais, não versionar
+"Anamnese Detalhada Guilherme.pdf"

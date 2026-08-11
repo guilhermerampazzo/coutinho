@@ -56,8 +56,10 @@ enum AnamnesisStatus {
 enum Goal {
   EMAGRECER
   GANHAR_MASSA
+  COMPOSICAO_CORPORAL
   SAUDE
   LONGEVIDADE
+  OUTRO
 }
 
 enum BowelFunction {
@@ -73,13 +75,6 @@ enum NotificationType {
   MENSAGEM
   CONTEUDO_NOVO
   PERSONALIZADA
-}
-
-enum LibraryContentType {
-  RECEITA
-  ARTIGO
-  VIDEO
-  MATERIAL
 }
 
 enum CheckInKind {
@@ -229,6 +224,33 @@ model Anamnesis {
   painfulExercises    String?
   avoidedExercises    String?
 
+  // Anamnese detalhada (estrutura aprovada pelo cliente — 2026-08): gates booleanos das
+  // perguntas condicionais (Sim/Não → detalhe só se aplicável) + campos de detalhe novos.
+  goalImprove                String?
+  currentDiet                String?
+  foodsAvoided               String?
+  workRoutine                String?
+  mealsOut                   String?
+  routineDifficulties        String?
+  sedentarySince             String?
+  trainingHistory            String?
+  enjoyedExercises           String?
+  pain                       String?
+  limitations                String?
+  injuries                   String?
+  hasDiseases                Boolean?
+  usesMedications            Boolean?
+  hasAllergies               Boolean?
+  hasIntolerances            Boolean?
+  hasNutritionalDeficiencies Boolean?
+  hadSurgeries               Boolean?
+  hasFamilyHistory           Boolean?
+  hasOrthopedicIssues        Boolean?
+  hasAlteredExams            Boolean?
+  usesSupplements            Boolean?
+  practicesActivity          Boolean?
+  hasBioimpedance            Boolean?
+
   currentStep  Int       @default(0)
   submittedAt  DateTime?
   analyzedAt   DateTime?
@@ -241,10 +263,12 @@ model Assessment {
   userId       String
   user         User     @relation(fields: [userId], references: [id])
   weightKg     Float?
+  heightCm     Float?
   waistCm      Float?
   abdomenCm    Float?
   armCm        Float?
   thighCm      Float?
+  chestCm      Float?
   muscleMassKg Float?
   fatMassKg    Float?
   recordedAt   DateTime @default(now())
@@ -345,17 +369,7 @@ model ExerciseLog {
   notes             String?
 }
 
-// ---------- Biblioteca, mensagens, notificações, check-ins ----------
-
-model LibraryContent {
-  id          String             @id @default(cuid())
-  type        LibraryContentType
-  title       String
-  body        String?
-  mediaUrl    String?
-  publishedAt DateTime?
-  createdAt   DateTime           @default(now())
-}
+// ---------- Mensagens, notificações, check-ins ----------
 
 model Thread {
   id        String    @id @default(cuid())

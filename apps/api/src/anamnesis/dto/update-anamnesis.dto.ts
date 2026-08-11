@@ -13,12 +13,15 @@ export class UpdateAnamnesisDto {
   // Objetivo
   @IsOptional() @IsEnum(Goal) goal?: Goal;
   @IsOptional() @IsString() goalDescription?: string;
+  @IsOptional() @IsString() goalImprove?: string;
 
   // Alimentação
   @IsOptional() @Type(() => Number) @IsInt() mealsPerDay?: number;
   @IsOptional() @Type(() => Number) @IsNumber() waterLitersPerDay?: number;
   @IsOptional() @IsString() preferredFoods?: string;
   @IsOptional() @IsString() dislikedFoods?: string;
+  @IsOptional() @IsString() foodsAvoided?: string;
+  @IsOptional() @IsString() currentDiet?: string;
   @IsOptional() @IsString() supplements?: string;
   @IsOptional() @IsString() allergies?: string;
   @IsOptional() @IsString() intolerances?: string;
@@ -33,11 +36,14 @@ export class UpdateAnamnesisDto {
   @IsOptional() @IsString() orthopedicIssues?: string;
   @IsOptional() @IsString() familyHistory?: string;
 
-  // Sono
+  // Sono / rotina
   @IsOptional() @IsString() sleepQuality?: string;
   @IsOptional() @Type(() => Number) @IsNumber() sleepHours?: number;
   @IsOptional() @IsString() sleepTime?: string;
   @IsOptional() @IsString() wakeTime?: string;
+  @IsOptional() @IsString() workRoutine?: string;
+  @IsOptional() @IsString() mealsOut?: string;
+  @IsOptional() @IsString() routineDifficulties?: string;
 
   // Função intestinal
   @IsOptional() @IsEnum(BowelFunction) bowelFunction?: BowelFunction;
@@ -54,6 +60,26 @@ export class UpdateAnamnesisDto {
   @IsOptional() @IsString() availableEquipment?: string;
   @IsOptional() @IsString() painfulExercises?: string;
   @IsOptional() @IsString() avoidedExercises?: string;
+  @IsOptional() @IsString() sedentarySince?: string;
+  @IsOptional() @IsString() trainingHistory?: string;
+  @IsOptional() @IsString() enjoyedExercises?: string;
+  @IsOptional() @IsString() pain?: string;
+  @IsOptional() @IsString() limitations?: string;
+  @IsOptional() @IsString() injuries?: string;
+
+  // Gates das perguntas condicionais (Sim/Não → detalhe só se aplicável)
+  @IsOptional() @IsBoolean() hasDiseases?: boolean;
+  @IsOptional() @IsBoolean() usesMedications?: boolean;
+  @IsOptional() @IsBoolean() hasAllergies?: boolean;
+  @IsOptional() @IsBoolean() hasIntolerances?: boolean;
+  @IsOptional() @IsBoolean() hasNutritionalDeficiencies?: boolean;
+  @IsOptional() @IsBoolean() hadSurgeries?: boolean;
+  @IsOptional() @IsBoolean() hasFamilyHistory?: boolean;
+  @IsOptional() @IsBoolean() hasOrthopedicIssues?: boolean;
+  @IsOptional() @IsBoolean() hasAlteredExams?: boolean;
+  @IsOptional() @IsBoolean() usesSupplements?: boolean;
+  @IsOptional() @IsBoolean() practicesActivity?: boolean;
+  @IsOptional() @IsBoolean() hasBioimpedance?: boolean;
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) currentStep?: number;
 }

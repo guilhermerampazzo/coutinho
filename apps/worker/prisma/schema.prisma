@@ -77,13 +77,6 @@ enum NotificationType {
   PERSONALIZADA
 }
 
-enum LibraryContentType {
-  RECEITA
-  ARTIGO
-  VIDEO
-  MATERIAL
-}
-
 enum CheckInKind {
   NUTRICAO
   TREINO
@@ -328,16 +321,6 @@ model ExerciseLog {
   workoutExercise   WorkoutExercise @relation(fields: [workoutExerciseId], references: [id])
   performedAt       DateTime        @default(now())
   notes             String?
-}
-
-model LibraryContent {
-  id          String             @id @default(cuid())
-  type        LibraryContentType
-  title       String
-  body        String?
-  mediaUrl    String?
-  publishedAt DateTime?
-  createdAt   DateTime           @default(now())
 }
 
 model Thread {
