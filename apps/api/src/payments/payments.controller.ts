@@ -54,4 +54,15 @@ export class PaymentsController {
     const event = this.stripeProvider.constructEvent(req.rawBody ?? Buffer.from(""), signature);
     return this.paymentsService.handleStripeWebhook(event);
   }
+
+  /**
+   * Webhook do Mercado Pago (PIX). O MP não usa segredo de assinatura neste setup: o endpoint
+   * consulta o pagamento na API do MP e só age se ele existir e estiver "approved". Cadastrar em
+   * Mercado Pago > Integrações > Webhooks apontando para
+   * https://{$DOMAIN}/api/payments/webhook/mercadopago (evento "payment").
+   */
+  @Post("payments/webhook/mercadopago")
+  mercadopagoWebhook(@Req() req: Request) {
+    return this.paymentsService.handleMercadoPagoWebhook((req.body ?? {}) as Record<string, any>);
+  }
 }

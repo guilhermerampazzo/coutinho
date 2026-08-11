@@ -1,6 +1,8 @@
+import type { PaymentProviderName } from "@prisma/client";
+
 export type ChargeMethod = "pix" | "cartao";
 
-/** Status de um pagamento PIX (PaymentIntent do Stripe). */
+/** Status de um pagamento PIX (Mercado Pago). */
 export type PixPaymentStatus = "pending" | "paid" | "expired" | "failed";
 
 /** Entrada para criar um PaymentIntent de PIX no Stripe. */
@@ -11,6 +13,17 @@ export interface CreatePixPaymentIntentInput {
   /** Id do Customer no Stripe (User.stripeCustomerId). */
   stripeCustomerId: string;
   /** Quando o QR Code expira (o Stripe cancela o PIX automaticamente). */
+  expiresAt: Date;
+}
+
+/** Entrada para criar um PIX no Mercado Pago (única forma de pagamento do MP neste app). */
+export interface CreatePixChargeInput {
+  subscriptionId: string;
+  /** Valor único do PIX em reais (já com desconto de período/cupom). */
+  amount: number;
+  /** E-mail do pagador (obrigatório pelo Mercado Pago). */
+  customerEmail: string;
+  /** Quando o QR Code expira (o Mercado Pago cancela o PIX automaticamente). */
   expiresAt: Date;
 }
 
@@ -34,6 +47,9 @@ export interface PixPaymentInfo {
   qrCodeImageUrl?: string;
   hostedInstructionsUrl?: string;
   expiresAt?: number;
+  /** Id da assinatura no app (external_reference do Mercado Pago) — usado pelo webhook. */
+  externalReference?: string;
+  amount?: number;
 }
 
 /** Entrada para criar uma sessão de checkout embutido no Stripe (Embedded Checkout). */
@@ -74,4 +90,15 @@ export interface PaymentProvider {
   retrievePixPayment(paymentIntentId: string): Promise<PixPaymentInfo>;
   /** Cancela um PIX ainda não pago (ex.: antes de gerar um novo QR). */
   cancelPaymentIntent(paymentIntentId: string): Promise<void>;
+}
+
+/** Provider de PIX (implementado pelo Mercado Pago). O Stripe segue cuidando do cartão. */
+export interface PixProvider {
+  readonly name: PaymentProviderName;
+  /** Cria uma cobrança PIX — retorna o QR para exibir. */
+  createPixCharge(input: CreatePixChargeInput): Promise<PixPaymentIntentResult>;
+  /** Consulta o estado atual de um PIX (polling do front + webhook). */
+  retrievePixPayment(paymentId: string): Promise<PixPaymentInfo>;
+  /** Cancela um PIX ainda não pago (ex.: antes de gerar um novo QR). */
+  cancelPaymentIntent(paymentId: string): Promise<void>;
 }

@@ -1,9 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { Period, PlanCode, PaymentStatus } from "@prisma/client";
+import { PaymentProviderName, Period, PlanCode, PaymentStatus } from "@prisma/client";
 import Stripe from "stripe";
 import { PrismaService } from "../prisma/prisma.service";
 import { RemindersQueueService } from "../reminders/reminders-queue.service";
 import { StripePaymentProvider } from "./providers/stripe-payment.provider";
+import { MercadoPagoPixProvider } from "./providers/mercadopago-pix.provider";
 import type { PixPaymentInfo } from "./payment-provider.interface";
 import { CheckoutDto } from "./dto/checkout.dto";
 
@@ -21,7 +22,7 @@ const PERIOD_MONTHS: Record<Period, number> = {
   ANUAL: 12,
 };
 
-/** Validade do QR Code PIX — depois disso o Stripe cancela o PaymentIntent sozinho. */
+/** Validade do QR Code PIX — depois disso o Mercado Pago cancela o PIX sozinho. */
 const PIX_EXPIRATION_MS = 30 * 60 * 1000;
 
 @Injectable()
@@ -29,15 +30,17 @@ export class PaymentsService {
   constructor(
     private prisma: PrismaService,
     private stripeProvider: StripePaymentProvider,
+    // PIX em produção: Mercado Pago (hotfix da VPS); cartão/recorrência segue no Stripe.
+    private mercadoPagoPixProvider: MercadoPagoPixProvider,
     private reminders: RemindersQueueService
   ) {}
 
   /**
-   * Cria a Subscription (PENDING) e uma Checkout Session embutida do Stripe.
-   * - PIX    → mode=payment, cobrança única do valor cheio do período.
-   * - Cartão → mode=subscription, recorrente mensal; o Stripe cobra todo mês e cancela sozinho
-   *            (`cancel_at`) quando o período contratado termina — sem job de expiração (ver
-   *            DECISIONS.md). A liberação acontece no webhook, não aqui.
+   * Cria a Subscription (PENDING) e o pagamento:
+   * - PIX    → Mercado Pago, cobrança única do valor cheio do período (QR Code próprio).
+   * - Cartão → Checkout Session embutida do Stripe, recorrente mensal; o Stripe cobra todo mês e
+   *            cancela sozinho (`cancel_at`) quando o período contratado termina — sem job de
+   *            expiração (ver DECISIONS.md). A liberação acontece no webhook, não aqui.
    */
   async checkout(userId: string, dto: CheckoutDto) {
     const [user, plan] = await Promise.all([
@@ -68,22 +71,21 @@ export class PaymentsService {
       },
     });
 
-    const stripeCustomerId = await this.stripeProvider.getOrCreateCustomer(userId, user.email, user.name);
     const returnUrl = `${process.env.APP_PUBLIC_URL ?? "https://localhost"}/checkout?success=1`;
 
     if (dto.method === "pix") {
       const totalAmount = Number((plan.monthlyPrice * months * (1 - periodDiscount) * (1 - couponDiscount)).toFixed(2));
       const expiresAt = new Date(Date.now() + PIX_EXPIRATION_MS);
-      const pixResult = await this.stripeProvider.createPixPaymentIntent({
+      const pixResult = await this.mercadoPagoPixProvider.createPixCharge({
         subscriptionId: subscription.id,
         amount: totalAmount,
-        stripeCustomerId,
+        customerEmail: user.email,
         expiresAt,
       });
       await this.prisma.payment.create({
         data: {
           subscriptionId: subscription.id,
-          provider: this.stripeProvider.name,
+          provider: this.mercadoPagoPixProvider.name,
           providerChargeId: pixResult.paymentIntentId,
           amount: totalAmount,
           status: "PENDING",
@@ -103,6 +105,7 @@ export class PaymentsService {
       };
     }
 
+    const stripeCustomerId = await this.stripeProvider.getOrCreateCustomer(userId, user.email, user.name);
     const monthlyAmount = Number((plan.monthlyPrice * (1 - periodDiscount) * (1 - couponDiscount)).toFixed(2));
     const session = await this.stripeProvider.createEmbeddedCheckoutSession({
       subscriptionId: subscription.id,
@@ -118,8 +121,8 @@ export class PaymentsService {
 
   /**
    * Status do PIX para o front fazer polling. FALHA SEGURA CRÍTICA: se o webhook não chegou
-   * (atraso/config ausente) e o pagamento já está pago no Stripe, ativa a assinatura aqui mesmo —
-   * assim o usuário nunca fica "pagou mas continua bloqueado" (bug reportado na fase Mercado Pago).
+   * (atraso/config ausente) e o pagamento já está pago, ativa a assinatura aqui mesmo — assim o
+   * usuário nunca fica "pagou mas continua bloqueado" (bug reportado na fase Mercado Pago).
    */
   async getPixStatus(userId: string, subscriptionId: string) {
     const subscription = await this.prisma.subscription.findUnique({ where: { id: subscriptionId } });
@@ -135,11 +138,12 @@ export class PaymentsService {
       return { status: "pending" as const };
     }
 
+    const provider = this.pixProviderFor(payment.provider);
     let info: PixPaymentInfo;
     try {
-      info = await this.stripeProvider.retrievePixPayment(payment.providerChargeId);
+      info = await provider.retrievePixPayment(payment.providerChargeId);
     } catch {
-      // PaymentIntent inexistente/inacessível — o front pode regenerar um novo PIX.
+      // Pagamento inexistente/inacessível no provedor — o front pode regenerar um novo PIX.
       return { status: "failed" as const };
     }
 
@@ -151,6 +155,7 @@ export class PaymentsService {
         amount: payment.amount,
         status: "APPROVED",
         method: "pix",
+        provider: payment.provider,
       });
     }
 
@@ -187,7 +192,7 @@ export class PaymentsService {
 
     const stale = await this.prisma.payment.findMany({ where: { subscriptionId, method: "pix", status: "PENDING" } });
     for (const p of stale) {
-      if (p.providerChargeId) await this.stripeProvider.cancelPaymentIntent(p.providerChargeId);
+      if (p.providerChargeId) await this.pixProviderFor(p.provider).cancelPaymentIntent(p.providerChargeId);
       await this.prisma.payment.update({ where: { id: p.id }, data: { status: "FAILED" } });
     }
 
@@ -201,18 +206,17 @@ export class PaymentsService {
     const months = PERIOD_MONTHS[subscription.period];
     const totalAmount = Number((plan.monthlyPrice * months * (1 - periodDiscount) * (1 - couponDiscount)).toFixed(2));
 
-    const stripeCustomerId = await this.stripeProvider.getOrCreateCustomer(userId, user.email, user.name);
     const expiresAt = new Date(Date.now() + PIX_EXPIRATION_MS);
-    const pixResult = await this.stripeProvider.createPixPaymentIntent({
+    const pixResult = await this.mercadoPagoPixProvider.createPixCharge({
       subscriptionId,
       amount: totalAmount,
-      stripeCustomerId,
+      customerEmail: user.email,
       expiresAt,
     });
     await this.prisma.payment.create({
       data: {
         subscriptionId,
-        provider: this.stripeProvider.name,
+        provider: this.mercadoPagoPixProvider.name,
         providerChargeId: pixResult.paymentIntentId,
         amount: totalAmount,
         status: "PENDING",
@@ -357,6 +361,52 @@ export class PaymentsService {
     }
   }
 
+  /**
+   * Webhook do Mercado Pago (PIX). O MP não usa segredo de assinatura confiável por padrão no
+   * nosso setup, então o endpoint só aceita notificações cujo pagamento exista e esteja "approved"
+   * na API do MP (validação por consulta, não por confiança cega). Mesmo assim, a liberação real
+   * depende do polling do front (falha segura) — o webhook só acelera.
+   * Payload típico: { action, type, data: { id: <paymentId> }, ... }.
+   */
+  async handleMercadoPagoWebhook(body: Record<string, any>): Promise<{ ok: boolean }> {
+    const paymentId = body?.data?.id;
+    if (!paymentId) return { ok: false };
+
+    const payment = await this.prisma.payment.findFirst({
+      where: { providerChargeId: String(paymentId), method: "pix" },
+    });
+    if (!payment || payment.status === "APPROVED") return { ok: true };
+
+    let info: PixPaymentInfo;
+    try {
+      info = await this.mercadoPagoPixProvider.retrievePixPayment(String(paymentId));
+    } catch {
+      return { ok: true };
+    }
+    if (info.status !== "paid") return { ok: true };
+
+    const subscription = await this.prisma.subscription.findUnique({ where: { id: payment.subscriptionId } });
+    if (!subscription || subscription.status !== "PENDING") return { ok: true };
+
+    const activated = await this.activateSubscription(subscription.id, PERIOD_MONTHS[subscription.period]);
+    if (activated) {
+      await this.recordPayment(subscription.id, {
+        providerChargeId: String(paymentId),
+        amount: payment.amount,
+        status: "APPROVED",
+        method: "pix",
+        provider: "MERCADOPAGO",
+      });
+    }
+    return { ok: true };
+  }
+
+  /** Retorna o provider de PIX dono do pagamento (MERCADOPAGO ou STRIPE p/ registros antigos). */
+  private pixProviderFor(provider: PaymentProviderName) {
+    if (provider === "MERCADOPAGO") return this.mercadoPagoPixProvider;
+    return this.stripeProvider;
+  }
+
   /** Localiza a Subscription pelo client_reference_id/metadata da sessão (criada no checkout). */
   private async findBySession(session: Stripe.Checkout.Session) {
     const ref = session.client_reference_id ?? (session.metadata as any)?.subscriptionId;
@@ -423,12 +473,18 @@ export class PaymentsService {
   /** Registra um Payment sem duplicar (mesma providerChargeId só entra uma vez). */
   private async recordPayment(
     subscriptionId: string,
-    data: { providerChargeId: string; amount: number; status: PaymentStatus; method: string }
+    data: {
+      providerChargeId: string;
+      amount: number;
+      status: PaymentStatus;
+      method: string;
+      provider?: PaymentProviderName;
+    }
   ) {
     const existing = await this.prisma.payment.findFirst({ where: { subscriptionId, providerChargeId: data.providerChargeId } });
     if (existing) return existing;
     return this.prisma.payment.create({
-      data: { subscriptionId, provider: this.stripeProvider.name, ...data },
+      data: { subscriptionId, provider: data.provider ?? this.stripeProvider.name, ...data },
     });
   }
 }

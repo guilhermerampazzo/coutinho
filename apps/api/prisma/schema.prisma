@@ -38,6 +38,7 @@ enum SubscriptionStatus {
 
 enum PaymentProviderName {
   STRIPE
+  MERCADOPAGO
 }
 
 enum PaymentStatus {
