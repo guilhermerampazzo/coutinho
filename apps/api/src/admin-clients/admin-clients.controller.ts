@@ -27,6 +27,12 @@ export class AdminClientsController {
     return this.service.removeClient(id, req.user.userId);
   }
 
+  /** Resumo inteligente da anamnese (IA organiza/sintetiza; o profissional decide). */
+  @Get("clients/:id/summary")
+  clientSummary(@Param("id") id: string, @Req() req: any) {
+    return this.service.getClientSummary(id, req.user.userId);
+  }
+
   @Get("clients/:id")
   clientDetail(@Param("id") id: string) {
     return this.service.getClientDetail(id);

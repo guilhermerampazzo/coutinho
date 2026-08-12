@@ -4,6 +4,7 @@ import * as argon2 from "argon2";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { StripePaymentProvider } from "../payments/providers/stripe-payment.provider";
+import { AdminAiSummaryService, type AiSummaryResult } from "./ai-summary.service";
 import { CreateMealPlanDto } from "./dto/meal-plan.dto";
 import { CreateWorkoutDto } from "./dto/workout.dto";
 import { CreateClientDto } from "./dto/create-client.dto";
@@ -13,7 +14,8 @@ export class AdminClientsService {
   constructor(
     private prisma: PrismaService,
     private audit: AuditService,
-    private stripeProvider: StripePaymentProvider
+    private stripeProvider: StripePaymentProvider,
+    private aiSummary: AdminAiSummaryService
   ) {}
 
   listClients() {
@@ -90,6 +92,14 @@ export class AdminClientsService {
     });
     this.audit.log(professionalId, "REMOVE_CLIENT", "User", id, { email: client.email });
     return { ok: true };
+  }
+
+  /** Resumo inteligente (IA) da anamnese + avaliação física do cliente — apoio à análise. */
+  async getClientSummary(id: string, professionalId: string): Promise<AiSummaryResult> {
+    const client = await this.getClientDetail(id);
+    const result = await this.aiSummary.generateSummary(client);
+    this.audit.log(professionalId, "AI_SUMMARY", "User", id);
+    return result;
   }
 
   async getClientDetail(id: string) {

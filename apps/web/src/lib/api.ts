@@ -130,6 +130,13 @@ export const adminApi = {
   /** Remove o cadastro (anonimiza + cancela cobranças) — a conta some da lista. */
   removeClient: (id: string, token: string) => request<{ ok: boolean }>(`/admin/clients/${id}`, { method: "DELETE" }, token),
   clientDetail: (id: string, token: string) => request<any>(`/admin/clients/${id}`, {}, token),
+  /** Resumo inteligente da anamnese (IA organiza/sintetiza — o profissional decide). */
+  clientSummary: (id: string, token: string) =>
+    request<{ short: string; attentionPoints: string[]; detailed: { category: string; items: string[] }[] }>(
+      `/admin/clients/${id}/summary`,
+      {},
+      token
+    ),
   createMealPlan: (clientId: string, data: { meals: any[] }, token: string) =>
     request<any>(`/admin/clients/${clientId}/meal-plan`, { method: "POST", body: JSON.stringify(data) }, token),
   publishMealPlan: (mealPlanId: string, token: string) =>

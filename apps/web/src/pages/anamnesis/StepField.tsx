@@ -228,7 +228,7 @@ export function StepField({
     const min = question.min ?? 0;
     const max = question.max ?? 10;
     const step = question.stepValue ?? 1;
-    const current = typeof value === "number" ? value : min;
+    const current = typeof value === "number" ? value : Number(value) || min;
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -248,7 +248,7 @@ export function StepField({
           max={max}
           step={step}
           value={current}
-          onChange={(e) => onChange(Number(e.target.value))}
+          onChange={(e) => onChange(String(e.target.value))}
           style={{ width: "100%", accentColor: "var(--accent)" }}
         />
       </div>
@@ -256,14 +256,20 @@ export function StepField({
   }
 
   if (question.type === "number") {
+    // type="text" + inputMode="decimal": o input type=number controlado falha em WebViews
+    // mobile (campo não aceita dígitos). O valor é mantido como string até o save.
     return (
       <input
-        type="number"
+        type="text"
         inputMode="decimal"
-        value={typeof value === "number" ? value : ""}
-        onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+        autoComplete="off"
+        value={(value as string | undefined) ?? ""}
+        onChange={(e) => {
+          const raw = e.target.value.replace(",", ".");
+          onChange(raw === "" ? undefined : raw);
+        }}
         placeholder={question.placeholder ?? (question.unit ? `em ${question.unit}` : "")}
-        style={inputStyle}
+        style={{ ...inputStyle, minWidth: 0 }}
       />
     );
   }

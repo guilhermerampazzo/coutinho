@@ -13,10 +13,15 @@ function isVisible(q: Question, answers: Record<string, unknown>): boolean {
   return answers[q.gate.key] === q.gate.value;
 }
 
-/** Converte o valor bruto do StepField para o formato persistido na API. */
+/** Converte o valor bruto do StepField para o formato persistido na API (usado no save). */
 function serializeValue(q: Question, v: unknown): unknown {
   if (q.type === "chips") return Array.isArray(v) ? v.join(", ") : v;
+  if (q.type === "number" || q.type === "slider") {
+    if (v === "" || v === undefined || v === null) return undefined;
+    return Number(v);
+  }
   if (q.type === "choice" && (q.key === "mealsPerDay" || q.key === "trainingDaysPerWeek")) {
+    if (v === undefined || v === null) return undefined;
     return Number(v === "7 ou mais" ? 7 : v);
   }
   return v;
@@ -25,6 +30,15 @@ function serializeValue(q: Question, v: unknown): unknown {
 /** Converte o valor persistido de volta para o formato bruto do StepField. */
 function deserializeValue(q: Question, v: unknown): unknown {
   if (q.type === "chips") return typeof v === "string" && v ? v.split(", ") : [];
+  // Choice/inputs numéricos: o banco devolve number; o StepField compara com strings
+  // (opt.value "6") — sem essa conversão a opção salva nunca aparece selecionada (bug visto
+  // em produção: "a escolha trava" ao voltar na pergunta).
+  if (q.type === "number" || q.type === "slider") {
+    return v === null || v === undefined ? "" : String(v);
+  }
+  if (q.type === "choice" && (q.key === "mealsPerDay" || q.key === "trainingDaysPerWeek")) {
+    return v === null || v === undefined ? undefined : String(v);
+  }
   return v;
 }
 
@@ -40,7 +54,7 @@ export function AnamnesisPage() {
   const [loading, setLoading] = useState(true);
   const [stepIndex, setStepIndex] = useState(0);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
-  const [assessmentData, setAssessmentData] = useState<Record<string, number | undefined>>({});
+  const [assessmentData, setAssessmentData] = useState<Record<string, string | undefined>>({});
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +73,14 @@ export function AnamnesisPage() {
         // Rascunho da avaliação física (etapa 6) — sobrevive a sair e voltar na mesma máquina.
         try {
           const draft = localStorage.getItem(ASSESSMENT_DRAFT_KEY);
-          if (draft) setAssessmentData(JSON.parse(draft));
+          if (draft) {
+            const parsed = JSON.parse(draft);
+            const normalized: Record<string, string | undefined> = {};
+            for (const [k, v] of Object.entries(parsed)) {
+              normalized[k] = v === null || v === undefined ? undefined : String(v);
+            }
+            setAssessmentData(normalized);
+          }
         } catch {
           // ignora rascunho corrompido
         }
@@ -83,6 +104,13 @@ export function AnamnesisPage() {
   const stepMeta = stepsMeta[current.q.step - 1];
   const progress = current.q.step / stepsMeta.length;
 
+  // Valor exibido: campos assessment.* vivem no assessmentData (rascunho da avaliação);
+  // os demais, no formData. Sem isso o input numérico da etapa 6 é limpo a cada
+  // re-render (bug "o campo não permitiu digitar" visto em produção).
+  const currentValue = current.q.key.startsWith("assessment.")
+    ? deserializeValue(current.q, assessmentData[current.q.key.replace("assessment.", "")])
+    : deserializeValue(current.q, formData[current.q.key]);
+
   const flashSaved = useCallback(() => {
     setSavedFlash(true);
     window.setTimeout(() => setSavedFlash(false), 1600);
@@ -93,7 +121,16 @@ export function AnamnesisPage() {
     setSaving(true);
     setError(null);
     try {
-      await anamnesisApi.updateMine({ ...formData, currentStep: nextStep }, accessToken);
+      // Serializa os valores brutos (strings do StepField) para o formato da API
+      // (numbers/ints/enums) — só campos com resposta entram no body.
+      const payload: Record<string, unknown> = { currentStep: nextStep };
+      for (const q of questions) {
+        const raw = formData[q.key];
+        if (raw === undefined || raw === null || raw === "") continue;
+        const serialized = serializeValue(q, raw);
+        if (serialized !== undefined) payload[q.key] = serialized;
+      }
+      await anamnesisApi.updateMine(payload, accessToken);
       flashSaved();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível salvar. Tente novamente.");
@@ -106,8 +143,9 @@ export function AnamnesisPage() {
   function setValue(key: string, value: unknown) {
     if (key.startsWith("assessment.")) {
       const field = key.replace("assessment.", "");
+      const raw = (value as string | undefined) ?? undefined;
       setAssessmentData((prev) => {
-        const next = { ...prev, [field]: value as number | undefined };
+        const next = { ...prev, [field]: raw };
         localStorage.setItem(ASSESSMENT_DRAFT_KEY, JSON.stringify(next));
         return next;
       });
@@ -139,9 +177,15 @@ export function AnamnesisPage() {
       }
       // Última pergunta: salva, cria avaliação física (se preenchida) e envia.
       await save(current.listIndex);
-      const hasAssessment = Object.values(assessmentData).some((v) => v !== undefined && v !== null);
+      const hasAssessment = Object.values(assessmentData).some((v) => v !== undefined && v !== null && v !== "");
       if (hasAssessment && accessToken) {
-        await assessmentsApi.create(assessmentData, accessToken);
+        const numeric: Record<string, number> = {};
+        for (const [k, v] of Object.entries(assessmentData)) {
+          if (v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v))) {
+            numeric[k] = Number(v);
+          }
+        }
+        await assessmentsApi.create(numeric, accessToken);
       }
       if (accessToken) await anamnesisApi.submitMine(accessToken);
       localStorage.removeItem(ASSESSMENT_DRAFT_KEY);
@@ -230,8 +274,8 @@ export function AnamnesisPage() {
           )}
           <StepField
             question={current.q}
-            value={deserializeValue(current.q, formData[current.q.key])}
-            onChange={(v) => setValue(current.q.key, serializeValue(current.q, v))}
+            value={currentValue}
+            onChange={(v) => setValue(current.q.key, v)}
           />
         </div>
 

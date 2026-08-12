@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Button, Card, TextField } from "@couthealth/ui";
-import { adminApi, foodsApi, exercisesApi, type FoodItem, type ExerciseItem } from "../../lib/api";
+import { adminApi, foodsApi, exercisesApi, ApiError, type FoodItem, type ExerciseItem } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { AdminLayout } from "./AdminLayout";
 
@@ -78,6 +78,126 @@ function AnamnesisSummary({ anamnesis }: { anamnesis: Record<string, any> }) {
         </div>
       ))}
     </div>
+  );
+}
+
+const assessmentLabels: Record<string, string> = {
+  weightKg: "Peso (kg)",
+  heightCm: "Altura (cm)",
+  waistCm: "Cintura (cm)",
+  abdomenCm: "Abdômen (cm)",
+  armCm: "Braço (cm)",
+  thighCm: "Coxa (cm)",
+  chestCm: "Peitoral (cm)",
+  muscleMassKg: "Massa muscular (kg)",
+  fatMassKg: "Gordura corporal (kg)",
+};
+
+/** Avaliação física registrada pelo cliente na anamnese (etapa 6) ou na Evolução. */
+function AssessmentSummary({ assessments }: { assessments?: any[] }) {
+  const latest = assessments?.slice(-1)?.[0];
+  if (!latest) {
+    return <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>Sem avaliação física registrada.</p>;
+  }
+  const entries = Object.entries(assessmentLabels).filter(([key]) => latest[key] !== null && latest[key] !== undefined);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "var(--sp-3)" }}>
+      {entries.map(([key, label]) => (
+        <div key={key}>
+          <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)", margin: 0 }}>{label}</p>
+          <p style={{ margin: "2px 0 0", fontWeight: 600 }}>{latest[key]}</p>
+        </div>
+      ))}
+      <div>
+        <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)", margin: 0 }}>Registrado em</p>
+        <p style={{ margin: "2px 0 0", fontWeight: 600 }}>{new Date(latest.recordedAt).toLocaleDateString("pt-BR")}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Resumo inteligente da anamnese — a IA organiza/sintetiza; as decisões são do profissional. */
+function AiSummaryPanel({ clientId }: { clientId: string }) {
+  const { accessToken } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<{ short: string; attentionPoints: string[]; detailed: { category: string; items: string[] }[] } | null>(null);
+
+  async function generate() {
+    if (!accessToken) return;
+    setLoading(true);
+    setError(null);
+    try {
+      setSummary(await adminApi.clientSummary(clientId, accessToken));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível gerar o resumo.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Card style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--sp-3)", flexWrap: "wrap" }}>
+        <h3 style={{ margin: 0 }}>Resumo inteligente</h3>
+        {!summary && (
+          <Button onClick={generate} disabled={loading} style={{ height: 36 }}>
+            {loading ? "Gerando…" : "Gerar com IA"}
+          </Button>
+        )}
+      </div>
+
+      {error && <p style={{ color: "var(--danger)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{error}</p>}
+
+      {summary && (
+        <>
+          <div>
+            <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)", margin: "0 0 4px" }}>Resumo rápido</p>
+            <p style={{ margin: 0, lineHeight: 1.6 }}>{summary.short}</p>
+          </div>
+
+          {summary.attentionPoints.length > 0 && (
+            <div>
+              <p style={{ color: "var(--danger)", fontSize: "var(--fs-caption)", fontWeight: 600, margin: "0 0 4px" }}>Pontos de atenção</p>
+              <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+                {summary.attentionPoints.map((p, i) => (
+                  <li key={i} style={{ fontSize: "var(--fs-body-sm)", color: "var(--text-primary)" }}>
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {summary.detailed.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-3)" }}>
+              <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)", margin: 0 }}>Resumo detalhado</p>
+              {summary.detailed.map((section) => (
+                <div key={section.category} style={{ background: "var(--bg-base)", borderRadius: "var(--r-md)", padding: "var(--sp-4)" }}>
+                  <p style={{ margin: "0 0 6px", fontWeight: 700, fontSize: "var(--fs-body-sm)" }}>{section.category}</p>
+                  <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
+                    {section.items.map((item, i) => (
+                      <li key={i} style={{ fontSize: "var(--fs-body-sm)", color: "var(--text-secondary)" }}>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "var(--sp-2)", flexWrap: "wrap" }}>
+            <Button variant="secondary" onClick={generate} disabled={loading} style={{ height: 34, fontSize: "var(--fs-caption)" }}>
+              Regenerar
+            </Button>
+          </div>
+          <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)", margin: 0 }}>
+            A IA apenas organiza e resume as respostas — as decisões clínicas são suas. Confira sempre a anamnese original acima.
+          </p>
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -282,10 +402,19 @@ export function AdminClientDetailPage() {
       }
     >
       <div className="admin-split-2" style={{ display: "grid", gridTemplateColumns: "1fr 1.3fr", gap: "var(--sp-6)", alignItems: "start" }}>
-        <Card>
-          <h3 style={{ marginTop: 0 }}>Anamnese</h3>
-          <AnamnesisSummary anamnesis={client.anamnesis ?? {}} />
-        </Card>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-6)" }}>
+          <Card>
+            <h3 style={{ marginTop: 0 }}>Anamnese</h3>
+            <AnamnesisSummary anamnesis={client.anamnesis ?? {}} />
+          </Card>
+
+          <Card>
+            <h3 style={{ marginTop: 0 }}>Avaliação física</h3>
+            <AssessmentSummary assessments={client.assessments ?? []} />
+          </Card>
+
+          <AiSummaryPanel clientId={id} />
+        </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-6)" }}>
           <MealPlanBuilder clientId={id} />
