@@ -205,3 +205,16 @@ O cliente descreveu o fluxo de entrada completo. Mapeamento do que já existia v
 **Validação:** `npm run build` completo limpo (dist/tsbuildinfo apagados — tsc incremental estava mascarando build parcial) + teste de integração da ativação (5 cenários, continua passando) + **validação no browser real (Playwright + API stub)**:
 - Anamnese: percorrida ponta a ponta (etapa 1 → condicional Sim → chips "Arroz, Frango" → slider → tela final) — persistência conferida no stub (`status: ENVIADA`, `mealsPerDay: 4`, `preferredFoods: "Arroz, Frango"`, `trainingDaysPerWeek: 3`, etc.); "Responder depois" + retomada exata confirmadas.
 - Admin: login profissional → lista sem Biblioteca → "+ Novo cliente" (Carlos Pereira criado e listado) → "Remover" (confirm → some da lista; Ana/Bruno intactos).
+
+## 2026-08-12 — Bugs da anamnese em produção + resumo inteligente com IA no admin
+
+**Bugs corrigidos (reportados com screenshots pelo cliente):**
+1. **Choices numéricas "travadas"** (refeições/dia, dias de treino): o valor salvo no banco é number, mas o StepField comparava com as options (string) — ao voltar na pergunta, nenhuma opção aparecia selecionada e o toque não dava feedback visual. Fix: serialização consistente — o form guarda string (visual/compare) e o save serializa para number via DTO.
+2. **Campo numérico da etapa 6 não aceitava dígitos**: o value do StepField vinha de `formData["assessment.*"]` (inexistente) em vez do `assessmentData` — o input controlado era limpo a cada render. Fix: leitura correta do rascunho da avaliação + input `type=text inputMode=decimal` (o type=number controlado falha em WebView mobile); decimais aceitos e convertidos no submit.
+3. **"Não consigo acessar as respostas no admin"**: a anamnese aparecia, mas a **avaliação física** (peso/altura/circunferências/bioimpedância) não era exibida — Assessment não renderizado na página do cliente. Fix: card "Avaliação física" com as medidas mais recentes + data.
+
+**Resumo inteligente da anamnese (PDF do cliente):**
+- `GET /admin/clients/:id/summary` — a IA (qualquer provedor OpenAI-compatível: `AI_API_KEY`/`AI_BASE_URL`/`AI_MODEL` no .env) organiza e sintetiza a anamnese + avaliação física em: **resumo curto** (leitura de poucos segundos), **pontos de atenção** e **resumo detalhado por categorias** (objetivos, saúde, alimentação, rotina, treinamento, avaliação).
+- Princípio mantido (escopo §10): a IA **nunca prescreve nem decide** — as respostas originais continuam sempre visíveis no card "Anamnese" e o resumo é uma camada de apoio à análise do profissional. Audit `AI_SUMMARY` registrado.
+- Sem `AI_API_KEY` o botão mostra aviso claro — o resto da plataforma não é afetado. Env vars já no docker-compose (container api) e `.env.example`.
+- Validação: build limpo + browser real (stub): opção salva destacada ao voltar, campo numérico aceita "30"/"80.5", admin mostra avaliação física + resumo IA (curto/pontos/detalhado). Deploy na VPS concluído (api healthy).
