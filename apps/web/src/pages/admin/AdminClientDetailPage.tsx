@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Button, Card, TextField } from "@couthealth/ui";
-import { adminApi, foodsApi, exercisesApi, ApiError, type FoodItem, type ExerciseItem } from "../../lib/api";
+import { adminApi, foodsApi, exercisesApi, ApiError, type FoodItem, type FoodCategory, type ExerciseItem, type MuscleGroup } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { AdminLayout } from "./AdminLayout";
 
@@ -232,14 +232,20 @@ function AiSummaryPanel({ clientId }: { clientId: string }) {
 function MealPlanBuilder({ clientId }: { clientId: string }) {
   const { accessToken } = useAuth();
   const [search, setSearch] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [categories, setCategories] = useState<FoodCategory[]>([]);
   const [results, setResults] = useState<FoodItem[]>([]);
   const [items, setItems] = useState<{ foodId: string; name: string; quantityGrams: number }[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
+    foodsApi.categories().then(setCategories);
+  }, []);
+
+  useEffect(() => {
     if (search.length < 2) return setResults([]);
-    foodsApi.list(search).then(setResults);
-  }, [search]);
+    foodsApi.list(search, categoryId).then(setResults);
+  }, [search, categoryId]);
 
   async function publish() {
     if (!accessToken || items.length === 0) return;
@@ -257,7 +263,26 @@ function MealPlanBuilder({ clientId }: { clientId: string }) {
   return (
     <Card style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
       <h3 style={{ margin: 0 }}>Montar plano alimentar</h3>
-      <TextField label="Buscar alimento" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <TextField label="Buscar alimento" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div style={{ minWidth: 150 }}>
+          <label style={{ display: "block", fontSize: "var(--fs-caption)", color: "var(--text-tertiary)", marginBottom: 6 }}>Categoria</label>
+          <select
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            style={{ background: "var(--bg-base)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-md)", color: "var(--text-primary)", padding: "10px 12px", fontSize: "var(--fs-body-sm)", width: "100%" }}
+          >
+            <option value="">Todas</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
       {results.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 160, overflow: "auto" }}>
           {results.map((food) => (
@@ -297,14 +322,20 @@ function WorkoutBuilder({ clientId }: { clientId: string }) {
   const { accessToken } = useAuth();
   const [letter, setLetter] = useState("A");
   const [search, setSearch] = useState("");
+  const [muscleGroupId, setMuscleGroupId] = useState("");
+  const [groups, setGroups] = useState<MuscleGroup[]>([]);
   const [results, setResults] = useState<ExerciseItem[]>([]);
   const [items, setItems] = useState<{ exerciseId: string; name: string; sets: number; reps: string }[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
+    exercisesApi.muscleGroups().then(setGroups);
+  }, []);
+
+  useEffect(() => {
     if (search.length < 2) return setResults([]);
-    exercisesApi.list(search).then(setResults);
-  }, [search]);
+    exercisesApi.list(search, muscleGroupId).then(setResults);
+  }, [search, muscleGroupId]);
 
   async function publish() {
     if (!accessToken || items.length === 0) return;
@@ -323,7 +354,26 @@ function WorkoutBuilder({ clientId }: { clientId: string }) {
     <Card style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
       <h3 style={{ margin: 0 }}>Montar treino</h3>
       <TextField label="Letra do treino" value={letter} onChange={(e) => setLetter(e.target.value.toUpperCase())} />
-      <TextField label="Buscar exercício" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <TextField label="Buscar exercício" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div style={{ minWidth: 150 }}>
+          <label style={{ display: "block", fontSize: "var(--fs-caption)", color: "var(--text-tertiary)", marginBottom: 6 }}>Grupo muscular</label>
+          <select
+            value={muscleGroupId}
+            onChange={(e) => setMuscleGroupId(e.target.value)}
+            style={{ background: "var(--bg-base)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-md)", color: "var(--text-primary)", padding: "10px 12px", fontSize: "var(--fs-body-sm)", width: "100%" }}
+          >
+            <option value="">Todos</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
       {results.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 160, overflow: "auto" }}>
           {results.map((ex) => (
@@ -337,7 +387,7 @@ function WorkoutBuilder({ clientId }: { clientId: string }) {
               }}
               style={{ textAlign: "left", background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: 8, padding: 8, color: "var(--text-primary)", cursor: "pointer" }}
             >
-              {ex.name} — {ex.muscleGroup}
+              {ex.name} — {ex.muscleGroup?.name ?? "—"}
             </button>
           ))}
         </div>

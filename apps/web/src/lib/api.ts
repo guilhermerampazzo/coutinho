@@ -150,10 +150,18 @@ export const adminApi = {
     request<any>(`/admin/clients/${clientId}/messages`, { method: "POST", body: JSON.stringify({ body }) }, token),
 };
 
+export interface FoodCategory {
+  id: string;
+  name: string;
+  order: number;
+  _count?: { foods: number };
+}
+
 export interface FoodItem {
   id: string;
   name: string;
-  category: string;
+  categoryId: string;
+  category?: FoodCategory;
   kcal: number;
   protein: number;
   carbs: number;
@@ -162,24 +170,40 @@ export interface FoodItem {
 }
 
 export const foodsApi = {
-  list: (search?: string) => request<FoodItem[]>(`/foods${search ? `?search=${encodeURIComponent(search)}` : ""}`),
-  create: (data: Omit<FoodItem, "id">, token: string) => request<FoodItem>("/foods", { method: "POST", body: JSON.stringify(data) }, token),
+  list: (search?: string, categoryId?: string) =>
+    request<FoodItem[]>(`/foods?${new URLSearchParams({ ...(search ? { search } : {}), ...(categoryId ? { categoryId } : {}) })}`),
+  categories: () => request<FoodCategory[]>("/foods/categories"),
+  createCategory: (name: string, token: string) => request<FoodCategory>("/foods/categories", { method: "POST", body: JSON.stringify({ name }) }, token),
+  removeCategory: (id: string, token: string) => request<void>(`/foods/categories/${id}`, { method: "DELETE" }, token),
+  create: (data: Omit<FoodItem, "id" | "category">, token: string) => request<FoodItem>("/foods", { method: "POST", body: JSON.stringify(data) }, token),
   update: (id: string, data: Partial<FoodItem>, token: string) =>
     request<FoodItem>(`/foods/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
   remove: (id: string, token: string) => request<void>(`/foods/${id}`, { method: "DELETE" }, token),
 };
 
+export interface MuscleGroup {
+  id: string;
+  name: string;
+  order: number;
+  _count?: { exercises: number };
+}
+
 export interface ExerciseItem {
   id: string;
   name: string;
-  muscleGroup: string;
+  muscleGroupId: string;
+  muscleGroup?: MuscleGroup;
   description?: string;
   videoUrl?: string;
 }
 
 export const exercisesApi = {
-  list: (search?: string) => request<ExerciseItem[]>(`/exercises${search ? `?search=${encodeURIComponent(search)}` : ""}`),
-  create: (data: Omit<ExerciseItem, "id">, token: string) =>
+  list: (search?: string, muscleGroupId?: string) =>
+    request<ExerciseItem[]>(`/exercises?${new URLSearchParams({ ...(search ? { search } : {}), ...(muscleGroupId ? { muscleGroupId } : {}) })}`),
+  muscleGroups: () => request<MuscleGroup[]>("/exercises/muscle-groups"),
+  createMuscleGroup: (name: string, token: string) => request<MuscleGroup>("/exercises/muscle-groups", { method: "POST", body: JSON.stringify({ name }) }, token),
+  removeMuscleGroup: (id: string, token: string) => request<void>(`/exercises/muscle-groups/${id}`, { method: "DELETE" }, token),
+  create: (data: Omit<ExerciseItem, "id" | "muscleGroup">, token: string) =>
     request<ExerciseItem>("/exercises", { method: "POST", body: JSON.stringify(data) }, token),
   update: (id: string, data: Partial<ExerciseItem>, token: string) =>
     request<ExerciseItem>(`/exercises/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),

@@ -232,3 +232,14 @@ O cliente descreveu o fluxo de entrada completo. Mapeamento do que já existia v
 - Dados de produção removidos via SQL (DELETE com dependentes: ExerciseLog → WorkoutExercise → MealItem → Food/ExerciseLibrary).
 - ⏳ **Pendente do cliente:** a lista real de alimentos/exercícios ("em breve") + briefing `BANCOS.pdf` recebido: categorias/grupos **selecionáveis e gerenciáveis pelo painel** (alimentos: Frutas; Grãos, cereais e leguminosas; Legumes e verduras; Proteínas; Gorduras e sementes; Suplementos; Outros — exercícios: Peitoral, Costas, Ombros, Braços, Quadríceps, Posterior de coxa, Glúteos, Adutores, Abdutores, Panturrilhas, Abdômen, Lombar, Outros) e usados como **filtros na montagem** do plano/treino. Implementar quando a lista chegar.
 - Backup pré-deploy: `/root/backups/coutinho-20260813-1714` (db.sql.gz + .env + volumes).
+
+## 2026-08-13 — Estrutura do BANCOS.pdf implementada (categorias/grupos selecionáveis + filtros)
+
+Antecipando a lista real de alimentos/exercícios (que o cliente ainda vai enviar), implementei a estrutura pedida no briefing `BANCOS.pdf`:
+
+- **Schema**: novos models `FoodCategory` e `MuscleGroup` (nome único + ordem), gerenciáveis pelo painel. `Food.category` (texto) → `categoryId` (FK obrigatória); `ExerciseLibrary.muscleGroup` (texto) → `muscleGroupId` (FK obrigatória). Migration `20260813120000_food_categories_muscle_groups` com backfill defensivo ("Outros") para dados órfãos.
+- **Seed**: 7 categorias (Frutas; Grãos, cereais e leguminosas; Legumes e verduras; Proteínas; Gorduras e sementes; Suplementos; Outros) + 13 grupos musculares (Peitoral…Outros) via upsert — o admin pode adicionar/renomear/remover sem código.
+- **API**: `GET /foods?categoryId=` e `GET /exercises?muscleGroupId=` (filtro) com `include` da classificação; CRUD admin `POST/PATCH/DELETE /foods/categories` e `/exercises/muscle-groups` — remoção de classificação em uso retorna 400 com mensagem (FK RESTRICT).
+- **Front**: `AdminFoodsPage`/`AdminExercisesPage` com select obrigatório no cadastro (nunca campo digitável), filtro por classificação na listagem e gestão inline de categorias/grupos (adicionar/remover com contador de uso); `MealPlanBuilder`/`WorkoutBuilder` no perfil do cliente ganharam select de filtro ao buscar alimento/exercício.
+- **Worker**: schema duplicado sincronizado (sem migration — worker não roda migrate).
+- Validação: migration aplicada em Postgres real (docker local), builds web/api/worker OK, testes de API locais (criar/listar/filtrar/CRUD classificação + proteção 400). Deploy na VPS com backup prévio.

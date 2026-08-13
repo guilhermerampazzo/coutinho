@@ -78,10 +78,44 @@ async function main() {
     console.log(`[seed] admin criado: ${adminEmail} / mudeesta-senha-123 (TROCAR)`);
   }
 
+  // Classificações selecionáveis dos bancos (briefing BANCOS.pdf 2026-08) — o seed garante
+  // as opções padrão; o admin pode adicionar/renomear/remover pelo painel sem código.
+  const foodCategories = [
+    "Frutas",
+    "Grãos, cereais e leguminosas",
+    "Legumes e verduras",
+    "Proteínas",
+    "Gorduras e sementes",
+    "Suplementos",
+    "Outros",
+  ];
+  for (const [i, name] of foodCategories.entries()) {
+    await prisma.foodCategory.upsert({ where: { name }, update: {}, create: { name, order: i } });
+  }
+
+  const muscleGroups = [
+    "Peitoral",
+    "Costas",
+    "Ombros",
+    "Braços",
+    "Quadríceps",
+    "Posterior de coxa",
+    "Glúteos",
+    "Adutores",
+    "Abdutores",
+    "Panturrilhas",
+    "Abdômen",
+    "Lombar",
+    "Outros",
+  ];
+  for (const [i, name] of muscleGroups.entries()) {
+    await prisma.muscleGroup.upsert({ where: { name }, update: {}, create: { name, order: i } });
+  }
+
   // Bancos de alimentos/exercícios: vazios de propósito — o cliente fornece a lista
   // real (BANCOS.pdf, 2026-08) e as categorias/grupos selecionáveis ficam para a próxima rodada.
 
-  console.log(`[seed] concluído: 3 planos, 1 cupom (BEMVINDO10), 1 admin.`);
+  console.log(`[seed] concluído: 3 planos, 1 cupom (BEMVINDO10), 1 admin, ${foodCategories.length} categorias de alimentos, ${muscleGroups.length} grupos musculares.`);
 }
 
 main()
