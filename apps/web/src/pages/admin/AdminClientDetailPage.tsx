@@ -76,11 +76,37 @@ function AnamnesisSummary({ anamnesis }: { anamnesis: Record<string, any> }) {
       {entries.map(([key]) => (
         <div key={key}>
           <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)", margin: 0 }}>{anamnesisLabels[key]}</p>
-          <p style={{ margin: "2px 0 0" }}>{String(anamnesis[key])}</p>
+          <p style={{ margin: "2px 0 0" }}>{prettyAnamnesisValue(anamnesis[key])}</p>
         </div>
       ))}
     </div>
   );
+}
+
+/** Traduz enums/booleans para leitura humana no admin (mesmo dicionário do resumo IA). */
+function prettyAnamnesisValue(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "";
+  if (typeof v === "boolean") return v ? "Sim" : "Não";
+  const labels: Record<string, string> = {
+    EMAGRECER: "Emagrecer",
+    GANHAR_MASSA: "Ganhar massa muscular",
+    COMPOSICAO_CORPORAL: "Melhorar composição corporal",
+    SAUDE: "Melhorar a saúde",
+    LONGEVIDADE: "Longevidade",
+    OUTRO: "Outro",
+    NORMAL: "Normal",
+    CONSTIPACAO: "Constipação",
+    DIARREIA: "Diarreia",
+    IRREGULAR: "Irregular",
+    feminino: "Feminino",
+    masculino: "Masculino",
+    outro: "Outro",
+    boa: "Bom",
+    otima: "Muito bom",
+    ruim: "Ruim",
+    regular: "Regular",
+  };
+  return labels[String(v)] ?? String(v);
 }
 
 const assessmentLabels: Record<string, string> = {
