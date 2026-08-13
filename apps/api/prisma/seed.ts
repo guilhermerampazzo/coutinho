@@ -1,7 +1,5 @@
 import { PrismaClient, PlanCode, Role } from "@prisma/client";
 import * as argon2 from "argon2";
-import { foods } from "./seed-data/foods";
-import { exercises } from "./seed-data/exercises";
 
 const prisma = new PrismaClient();
 
@@ -80,17 +78,10 @@ async function main() {
     console.log(`[seed] admin criado: ${adminEmail} / mudeesta-senha-123 (TROCAR)`);
   }
 
-  for (const food of foods) {
-    const existing = await prisma.food.findFirst({ where: { name: food.name } });
-    if (!existing) await prisma.food.create({ data: food });
-  }
+  // Bancos de alimentos/exercícios: vazios de propósito — o cliente fornece a lista
+  // real (BANCOS.pdf, 2026-08) e as categorias/grupos selecionáveis ficam para a próxima rodada.
 
-  for (const exercise of exercises) {
-    const existing = await prisma.exerciseLibrary.findFirst({ where: { name: exercise.name } });
-    if (!existing) await prisma.exerciseLibrary.create({ data: exercise });
-  }
-
-  console.log(`[seed] concluído: 3 planos, 1 cupom (BEMVINDO10), 1 admin, ${foods.length} alimentos, ${exercises.length} exercícios.`);
+  console.log(`[seed] concluído: 3 planos, 1 cupom (BEMVINDO10), 1 admin.`);
 }
 
 main()

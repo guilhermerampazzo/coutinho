@@ -71,10 +71,12 @@ function AnamnesisSummary({ anamnesis }: { anamnesis: Record<string, any> }) {
   if (entries.length === 0) return <p style={{ color: "var(--text-secondary)" }}>Anamnese ainda não preenchida.</p>;
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "var(--sp-4)" }}>
-      {entries.map(([key, value]) => (
+      {/* entries vem de Object.entries(anamnesisLabels) → [key, label]; o VALOR exibido
+          é anamnesis[key] (dado do cliente), não o label (bug corrigido 2026-08-13). */}
+      {entries.map(([key]) => (
         <div key={key}>
           <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)", margin: 0 }}>{anamnesisLabels[key]}</p>
-          <p style={{ margin: "2px 0 0" }}>{String(value)}</p>
+          <p style={{ margin: "2px 0 0" }}>{String(anamnesis[key])}</p>
         </div>
       ))}
     </div>

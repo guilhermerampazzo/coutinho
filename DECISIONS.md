@@ -218,3 +218,17 @@ O cliente descreveu o fluxo de entrada completo. Mapeamento do que já existia v
 - Princípio mantido (escopo §10): a IA **nunca prescreve nem decide** — as respostas originais continuam sempre visíveis no card "Anamnese" e o resumo é uma camada de apoio à análise do profissional. Audit `AI_SUMMARY` registrado.
 - Sem `AI_API_KEY` o botão mostra aviso claro — o resto da plataforma não é afetado. Env vars já no docker-compose (container api) e `.env.example`.
 - Validação: build limpo + browser real (stub): opção salva destacada ao voltar, campo numérico aceita "30"/"80.5", admin mostra avaliação física + resumo IA (curto/pontos/detalhado). Deploy na VPS concluído (api healthy).
+
+## 2026-08-13 — Anamnese no admin mostrava labels duplicados + bancos de alimentos/exercícios esvaziados
+
+**Bug reportado pelo cliente (screenshot):** "continuo sem acesso a Anamnese do cliente na íntegra" — no admin, o card Anamnese exibia cada label **repetido** (ex.: label "Objetivo" e "valor" Objetivo), sem nenhum dado do cliente, enquanto a Avaliação física aparecia normal.
+
+**Investigação em produção (VPS):** o banco estava perfeito (anamnese ENVIADA com 68 campos: sexo, objetivo, refeições, alimentos, sono, cirurgias etc.) e a API retornava tudo (`GET /admin/clients/:id` OK). O bug era 100% do front.
+
+**Causa raiz:** `AnamnesisSummary` fazia `Object.entries(anamnesisLabels)` (pares `[key, label]`) filtrado pela presença de `anamnesis[key]`, mas o `map(([key, value])` usava `value` — que é o **label**, não o dado — como valor exibido. Bug introduzido na Fase 5 (`89740c1`), invisível até a anamnese detalhada gerar dados de verdade. O `AssessmentSummary` vizinho usava `latest[key]` corretamente — por isso só a anamnese parecia vazia. Fix: `String(anamnesis[key])`.
+
+**Bancos de alimentos e exercícios esvaziados (pedido do cliente):**
+- `seed.ts` não insere mais alimentos/exercícios; arquivos `prisma/seed-data/foods.ts` e `exercises.ts` deletados (o seed só cria planos/cupom/admin).
+- Dados de produção removidos via SQL (DELETE com dependentes: ExerciseLog → WorkoutExercise → MealItem → Food/ExerciseLibrary).
+- ⏳ **Pendente do cliente:** a lista real de alimentos/exercícios ("em breve") + briefing `BANCOS.pdf` recebido: categorias/grupos **selecionáveis e gerenciáveis pelo painel** (alimentos: Frutas; Grãos, cereais e leguminosas; Legumes e verduras; Proteínas; Gorduras e sementes; Suplementos; Outros — exercícios: Peitoral, Costas, Ombros, Braços, Quadríceps, Posterior de coxa, Glúteos, Adutores, Abdutores, Panturrilhas, Abdômen, Lombar, Outros) e usados como **filtros na montagem** do plano/treino. Implementar quando a lista chegar.
+- Backup pré-deploy: `/root/backups/coutinho-20260813-1714` (db.sql.gz + .env + volumes).
