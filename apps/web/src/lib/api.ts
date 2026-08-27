@@ -7,15 +7,84 @@ export class ApiError extends Error {
   }
 }
 
+const ACCESS_KEY = "couthealth.access";
+const REFRESH_KEY = "couthealth.refresh";
+
+let refreshPromise: Promise<string | null> | null = null;
+
+function getRefreshToken(): string | null {
+  try {
+    return localStorage.getItem(REFRESH_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setTokens(access: string, refresh: string) {
+  try {
+    localStorage.setItem(ACCESS_KEY, access);
+    localStorage.setItem(REFRESH_KEY, refresh);
+    window.dispatchEvent(new Event("couthealth:tokens-updated"));
+  } catch {
+    // storage indisponível
+  }
+}
+
+async function doRefresh(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+  const rt = getRefreshToken();
+  if (!rt) return null;
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: rt }),
+      });
+      if (!res.ok) {
+        try {
+          localStorage.removeItem(ACCESS_KEY);
+          localStorage.removeItem(REFRESH_KEY);
+        } catch {
+          // ignore
+        }
+        return null;
+      }
+      const data = (await res.json()) as { tokens: { accessToken: string; refreshToken: string } };
+      setTokens(data.tokens.accessToken, data.tokens.refreshToken);
+      return data.tokens.accessToken;
+    } catch {
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
 async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
+  const doFetch = async (tok?: string) =>
+    fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+        ...options.headers,
+      },
+    });
+
+  let res = await doFetch(token);
+
+  // 401 com token presente -> tenta renovar via refresh token (aba nova com access expirado)
+  // Não tenta refresh para as próprias rotas de auth que já lidam com credenciais
+  const isAuthRoute = path.startsWith("/auth/refresh") || path.startsWith("/auth/login") || path.startsWith("/auth/register");
+  if (res.status === 401 && token && !isAuthRoute) {
+    const newAccess = await doRefresh();
+    if (newAccess) {
+      res = await doFetch(newAccess);
+    }
+  }
+
   const body = await res.json().catch(() => undefined);
   if (!res.ok) {
     throw new ApiError(body?.message ?? "Erro inesperado. Tente novamente.", res.status);
@@ -44,6 +113,11 @@ export const authApi = {
   login: (data: { email: string; password: string }) =>
     request<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(data) }),
   me: (token: string) => request<AuthUser>("/auth/me", {}, token),
+  refresh: (refreshToken: string) =>
+    request<{ tokens: { accessToken: string; refreshToken: string } }>("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refreshToken }),
+    }),
   /** Quais logins sociais estão configurados no servidor — evita mostrar botão que só daria erro. */
   providers: () => request<{ google: boolean; apple: boolean }>("/auth/providers"),
 };
@@ -137,17 +211,29 @@ export const adminApi = {
       {},
       token
     ),
-  createMealPlan: (clientId: string, data: { meals: any[] }, token: string) =>
+  // Plano alimentar — com histórico e título editável
+  createMealPlan: (clientId: string, data: { title?: string; meals: any[] }, token: string) =>
     request<any>(`/admin/clients/${clientId}/meal-plan`, { method: "POST", body: JSON.stringify(data) }, token),
   publishMealPlan: (mealPlanId: string, token: string) =>
     request<any>(`/admin/meal-plans/${mealPlanId}/publish`, { method: "POST" }, token),
-  createWorkout: (clientId: string, data: { letter: string; exercises: any[] }, token: string) =>
+  listMealPlans: (clientId: string, token: string) => request<any[]>(`/admin/clients/${clientId}/meal-plans`, {}, token),
+  renameMealPlan: (mealPlanId: string, title: string, token: string) =>
+    request<any>(`/admin/meal-plans/${mealPlanId}/title`, { method: "PATCH", body: JSON.stringify({ title }) }, token),
+  // Treino — Treino A/B/C/D clicáveis com histórico e título
+  createWorkout: (clientId: string, data: { letter: string; title?: string; exercises: any[] }, token: string) =>
     request<any>(`/admin/clients/${clientId}/workout`, { method: "POST", body: JSON.stringify(data) }, token),
   publishWorkout: (workoutId: string, token: string) =>
     request<any>(`/admin/workouts/${workoutId}/publish`, { method: "POST" }, token),
+  listWorkouts: (clientId: string, token: string) => request<any[]>(`/admin/clients/${clientId}/workouts`, {}, token),
+  renameWorkout: (workoutId: string, title: string, token: string) =>
+    request<any>(`/admin/workouts/${workoutId}/title`, { method: "PATCH", body: JSON.stringify({ title }) }, token),
   clientMessages: (clientId: string, token: string) => request<any>(`/admin/clients/${clientId}/messages`, {}, token),
   replyToClient: (clientId: string, body: string, token: string) =>
     request<any>(`/admin/clients/${clientId}/messages`, { method: "POST", body: JSON.stringify({ body }) }, token),
+  // Composição corporal — avaliações registradas pelo profissional para o cliente
+  listAssessments: (clientId: string, token: string) => request<Assessment[]>(`/admin/clients/${clientId}/assessments`, {}, token),
+  createAssessment: (clientId: string, data: Record<string, number | undefined>, token: string) =>
+    request<Assessment>(`/admin/clients/${clientId}/assessments`, { method: "POST", body: JSON.stringify(data) }, token),
 };
 
 export interface FoodCategory {
@@ -231,10 +317,12 @@ export const messagesApi = {
 export interface Assessment {
   id: string;
   weightKg?: number;
+  heightCm?: number;
   waistCm?: number;
   abdomenCm?: number;
   armCm?: number;
   thighCm?: number;
+  chestCm?: number;
   muscleMassKg?: number;
   fatMassKg?: number;
   recordedAt: string;

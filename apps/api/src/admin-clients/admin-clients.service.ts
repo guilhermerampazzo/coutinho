@@ -109,25 +109,73 @@ export class AdminClientsService {
         anamnesis: true,
         assessments: { orderBy: { recordedAt: "asc" } },
         subscriptions: { orderBy: { createdAt: "desc" }, take: 1, include: { plan: true } },
-        mealPlans: { orderBy: { createdAt: "desc" }, take: 1, include: { meals: { include: { items: { include: { food: true } } } } } },
-        workouts: { orderBy: { createdAt: "desc" } },
+        mealPlans: { orderBy: { createdAt: "desc" }, include: { meals: { include: { items: { include: { food: true } } } } } },
+        workouts: { orderBy: { createdAt: "desc" }, include: { exercises: { include: { exercise: true } } } },
       },
     });
     if (!client) throw new NotFoundException("Cliente não encontrado.");
     return client;
   }
 
+  async listMealPlans(clientId: string) {
+    await this.assertClient(clientId);
+    return this.prisma.mealPlan.findMany({
+      where: { clientId },
+      orderBy: { createdAt: "desc" },
+      include: { meals: { include: { items: { include: { food: true } } } } },
+    });
+  }
+
+  async listWorkouts(clientId: string) {
+    await this.assertClient(clientId);
+    return this.prisma.workout.findMany({
+      where: { clientId },
+      orderBy: { createdAt: "desc" },
+      include: { exercises: { include: { exercise: true } } },
+    });
+  }
+
+  async renameMealPlan(mealPlanId: string, title: string) {
+    return this.prisma.mealPlan.update({ where: { id: mealPlanId }, data: { title } });
+  }
+
+  async renameWorkout(workoutId: string, title: string) {
+    return this.prisma.workout.update({ where: { id: workoutId }, data: { title } });
+  }
+
+  async createAssessmentForClient(clientId: string, dto: { weightKg?: number; heightCm?: number; waistCm?: number; abdomenCm?: number; armCm?: number; thighCm?: number; chestCm?: number; muscleMassKg?: number; fatMassKg?: number }, actorId: string) {
+    await this.assertClient(clientId);
+    const assessment = await this.prisma.assessment.create({ data: { userId: clientId, ...dto } });
+    this.audit.log(actorId, "CREATE_ASSESSMENT", "Assessment", assessment.id, { clientId });
+    return assessment;
+  }
+
+  async listAssessmentsForClient(clientId: string) {
+    await this.assertClient(clientId);
+    return this.prisma.assessment.findMany({ where: { userId: clientId }, orderBy: { recordedAt: "asc" } });
+  }
+
   async createMealPlan(clientId: string, dto: CreateMealPlanDto) {
     await this.assertClient(clientId);
+    const title = dto.title ?? `Plano alimentar — ${new Date().toLocaleDateString("pt-BR")}`;
     return this.prisma.mealPlan.create({
       data: {
         clientId,
+        title,
         meals: {
           create: dto.meals.map((meal) => ({
             time: meal.time,
             name: meal.name,
             notes: meal.notes,
-            items: { create: meal.items.map((item) => ({ foodId: item.foodId, quantityGrams: item.quantityGrams, notes: item.notes })) },
+            items: {
+              create: meal.items.map((item) => ({
+                foodId: item.foodId,
+                quantityGrams: item.quantityGrams,
+                quantity: item.quantity ?? item.quantityGrams,
+                unit: item.unit ?? "g",
+                notes: item.notes,
+              })),
+            },
           })),
         },
       },
@@ -155,10 +203,12 @@ export class AdminClientsService {
 
   async createWorkout(clientId: string, dto: CreateWorkoutDto) {
     await this.assertClient(clientId);
+    const title = dto.title ?? `Treino ${dto.letter} — ${new Date().toLocaleDateString("pt-BR")}`;
     return this.prisma.workout.create({
       data: {
         clientId,
         letter: dto.letter,
+        title,
         exercises: {
           create: dto.exercises.map((ex, i) => ({
             exerciseId: ex.exerciseId,

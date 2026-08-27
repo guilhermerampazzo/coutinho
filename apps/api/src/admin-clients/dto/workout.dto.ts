@@ -13,6 +13,7 @@ class WorkoutExerciseDto {
 
 export class CreateWorkoutDto {
   @IsString() letter!: string;
+  @IsOptional() @IsString() title?: string;
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

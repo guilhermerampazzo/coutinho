@@ -330,6 +330,7 @@ model MealPlan {
   id          String    @id @default(cuid())
   clientId    String
   client      User      @relation("ClientMealPlans", fields: [clientId], references: [id])
+  title       String?
   createdById String?
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
@@ -355,6 +356,8 @@ model MealItem {
   foodId        String
   food          Food   @relation(fields: [foodId], references: [id])
   quantityGrams Float
+  quantity      Float?
+  unit          String?
   notes         String?
 }
 
@@ -363,6 +366,7 @@ model Workout {
   clientId    String
   client      User      @relation("ClientWorkouts", fields: [clientId], references: [id])
   letter      String
+  title       String?
   createdById String?
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
