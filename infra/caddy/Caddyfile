@@ -32,3 +32,9 @@ http://{$DOMAIN:localhost} {
 		reverse_proxy landing:3100
 	}
 }
+
+# OmniRoute - AI Gateway (omni.couthealth.com.br) - proxies to omni:20128
+http://omni.couthealth.com.br {
+	reverse_proxy omni:20128
+}
+
