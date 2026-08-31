@@ -29,6 +29,7 @@ export class AdminClientsService {
         id: true,
         name: true,
         email: true,
+        modality: true,
         createdAt: true,
         anamnesis: { select: { status: true, submittedAt: true } },
         subscriptions: { orderBy: { createdAt: "desc" }, take: 1, select: { status: true, plan: { select: { name: true } } } },
@@ -52,11 +53,12 @@ export class AdminClientsService {
         email: dto.email,
         passwordHash: await argon2.hash(dto.password),
         role: Role.CLIENT,
+        modality: dto.modality ?? "ONLINE",
         consentedAt: new Date(),
       },
     });
-    this.audit.log(professionalId, "CREATE_CLIENT", "User", user.id, { email: dto.email, name: dto.name });
-    return { id: user.id, name: user.name, email: user.email };
+    this.audit.log(professionalId, "CREATE_CLIENT", "User", user.id, { email: dto.email, name: dto.name, modality: user.modality });
+    return { id: user.id, name: user.name, email: user.email, modality: user.modality };
   }
 
   /**

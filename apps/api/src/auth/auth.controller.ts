@@ -1,14 +1,21 @@
 import { randomBytes } from "node:crypto";
 import { Body, Controller, Get, Post, Req, Res, UnauthorizedException, UseGuards } from "@nestjs/common";
+import { IsEnum } from "class-validator";
 import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "@nestjs/passport";
 import type { Response } from "express";
+import { Modality } from "@prisma/client";
 import { AuthService } from "./auth.service";
 import { AppleService } from "./apple.service";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
+
+class ChooseModalityDto {
+  @IsEnum(Modality)
+  modality!: Modality;
+}
 
 @Controller("auth")
 export class AuthController {
@@ -35,6 +42,13 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@Req() req: any) {
     return this.authService.me(req.user.userId);
+  }
+
+  /** "Qual atendimento você deseja?" — escolha entre consultoria online e presencial. */
+  @Post("modality")
+  @UseGuards(JwtAuthGuard)
+  modality(@Req() req: any, @Body() dto: ChooseModalityDto) {
+    return this.authService.chooseModality(req.user.userId, dto.modality);
   }
 
   @Get("google")

@@ -66,6 +66,12 @@ export default function LandingEditorial() {
           >
             Criar conta
           </a>
+          <a
+            href={`${APP_URL}/criar-conta?modalidade=presencial`}
+            style={{ fontSize: "var(--fs-body-sm)", color: "var(--ink-900)", borderBottom: "1px solid var(--gray-500)", paddingBottom: 2, width: "fit-content" }}
+          >
+            Sou aluno/paciente presencial
+          </a>
         </div>
       </section>
 

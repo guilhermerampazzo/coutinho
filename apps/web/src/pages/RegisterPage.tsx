@@ -18,6 +18,11 @@ export function RegisterPage() {
   const { setSession } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  // "Sou aluno/paciente presencial" (landing) chega com ?modalidade=presencial — mesmo cadastro,
+  // modalidade diferente: acesso livre, sem contratação/pagamento pela plataforma.
+  const [modality, setModality] = useState<"ONLINE" | "PRESENCIAL">(() =>
+    new URLSearchParams(window.location.search).get("modalidade") === "presencial" ? "PRESENCIAL" : "ONLINE"
+  );
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -28,7 +33,7 @@ export function RegisterPage() {
     }
     setSubmitting(true);
     try {
-      const res = await authApi.register({ name, email, password, consent });
+      const res = await authApi.register({ name, email, password, consent, modality });
       setSession(res.user, res.tokens.accessToken, res.tokens.refreshToken);
       navigate(consumePostAuthRedirect() ?? resolveRedirectTarget(location.search, res.user.role));
     } catch (err) {
@@ -38,9 +43,46 @@ export function RegisterPage() {
     }
   }
 
+  const modalityOptions: { value: "ONLINE" | "PRESENCIAL"; label: string; hint: string }[] = [
+    { value: "ONLINE", label: "Consultoria online", hint: "Planos COUT com contratação e pagamento pela plataforma." },
+    { value: "PRESENCIAL", label: "Atendimento presencial", hint: "Acesso livre à sua área; cobranças tratadas diretamente com o profissional." },
+  ];
+
   return (
-    <AuthLayout title="Criar conta" subtitle="Comece seu acompanhamento contínuo.">
+    <AuthLayout title="Criar conta" subtitle={modality === "PRESENCIAL" ? "Área do aluno/paciente presencial." : "Comece seu acompanhamento contínuo."}>
       <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: "var(--sp-5)" }}>
+        <fieldset style={{ border: 0, margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+          <legend style={{ fontSize: "0.875rem", color: "var(--text-secondary)", marginBottom: 6, padding: 0 }}>Qual atendimento você deseja?</legend>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "var(--sp-3)" }}>
+            {modalityOptions.map((opt) => {
+              const selected = modality === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setModality(opt.value)}
+                  aria-pressed={selected}
+                  style={{
+                    textAlign: "left",
+                    cursor: "pointer",
+                    padding: "var(--sp-4)",
+                    borderRadius: "var(--r-md)",
+                    font: "inherit",
+                    color: "var(--text-primary)",
+                    background: selected ? "var(--bg-card)" : "var(--bg-surface)",
+                    border: selected ? "1px solid var(--accent)" : "1px solid var(--border-hairline)",
+                  }}
+                >
+                  <span style={{ display: "block", fontWeight: 600, fontSize: "0.9375rem", marginBottom: 4 }}>
+                    {opt.label}
+                    {selected ? " ✓" : ""}
+                  </span>
+                  <span style={{ display: "block", fontSize: "0.75rem", lineHeight: 1.45, color: "var(--text-secondary)" }}>{opt.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
         <TextField label="Nome" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
         <TextField label="E-mail" type="email" placeholder="voce@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
         <TextField

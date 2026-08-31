@@ -3,6 +3,7 @@ import { authApi, type AuthUser } from "./api";
 
 export const ACCESS_KEY = "couthealth.access";
 export const REFRESH_KEY = "couthealth.refresh";
+const USER_KEY = "couthealth.user";
 const CHANNEL_NAME = "couthealth-auth";
 
 interface AuthContextValue {
@@ -38,13 +39,46 @@ function safeRemove(key: string) {
   }
 }
 
+/** Cache do último usuário conhecido — permite reidratar a sessão instantaneamente no boot,
+ *  mesmo se a API estiver brevemente fora do ar (não derruba o login por erro transitório). */
+function readCachedUser(): AuthUser | null {
+  try {
+    const raw = safeGet(USER_KEY);
+    return raw ? (JSON.parse(raw) as AuthUser) : null;
+  } catch {
+    return null;
+  }
+}
+function writeCachedUser(user: AuthUser | null) {
+  try {
+    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+    else localStorage.removeItem(USER_KEY);
+  } catch {
+    // ignore
+  }
+}
+/** Erro transitório (rede/503) NÃO é credencial inválida — só 401/403 derrubam a sessão. */
+function isAuthRejection(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  return status === 401 || status === 403;
+}
+function isNetworkError(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  return status === undefined || status >= 500;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  // Reidrata imediatamente do cache (se houver tokens) — evita "pedir login" ao abrir nova aba
+  // enquanto o /auth/me de validação ainda está em voo ou a API está brevemente indisponível.
+  const cached = readCachedUser();
+  const bootTokens = safeGet(ACCESS_KEY) && safeGet(REFRESH_KEY);
+  const [user, setUser] = useState<AuthUser | null>(bootTokens ? cached : null);
   const [accessToken, setAccessToken] = useState<string | null>(() => safeGet(ACCESS_KEY));
   const [loading, setLoading] = useState(true);
   const channelRef = useRef<BroadcastChannel | null>(null);
 
-  // Busca /auth/me com o token atual; se 401 tenta usar o refresh token (aba nova com access expirado)
+  // Busca /auth/me com o token atual; se 401 tenta usar o refresh token (aba nova com access expirado).
+  // Se o refresh FALHA por erro de rede/5xx, propaga como erro transitório (não derruba a sessão).
   const fetchMe = useCallback(async (token: string | null): Promise<AuthUser | null> => {
     if (!token) return null;
     try {
@@ -67,8 +101,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               // ignore
             }
             return await authApi.me(refreshed.tokens.accessToken);
-          } catch {
-            // refresh falhou — desloga
+          } catch (refreshErr: unknown) {
+            const refreshStatus = (refreshErr as { status?: number })?.status;
+            // Refresh rejeitado explicitamente (401/403) → sessão mesmo expirada; erro de rede → transitório.
+            if (refreshStatus === undefined || refreshStatus >= 500) throw refreshErr;
           }
         }
       }
@@ -83,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token) {
       setAccessToken(null);
       setUser(null);
+      writeCachedUser(null);
       return;
     }
     if (token !== accessToken) {
@@ -92,10 +129,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Na prática, sempre revalida quando o token veio de outra aba para garantir dados frescos.
     try {
       const me = await fetchMe(token);
-      if (me) setUser(me);
-    } catch {
+      if (me) {
+        setUser(me);
+        writeCachedUser(me);
+      }
+    } catch (err) {
+      // Erro transitório (rede/API fora do ar) — mantém a sessão em cache, tenta de novo no próximo foco.
+      if (!isAuthRejection(err) && isNetworkError(err)) return;
       safeRemove(ACCESS_KEY);
       safeRemove(REFRESH_KEY);
+      writeCachedUser(null);
       setAccessToken(null);
       setUser(null);
     }
@@ -112,11 +155,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       try {
         const me = await fetchMe(token);
-        if (!cancelled) setUser(me);
-      } catch {
-        safeRemove(ACCESS_KEY);
-        safeRemove(REFRESH_KEY);
-        if (!cancelled) setAccessToken(null);
+        if (!cancelled) {
+          setUser(me);
+          writeCachedUser(me);
+        }
+      } catch (err) {
+        // Sessão só é derrubada se o servidor rejeitou explicitamente (401/403 mesmo após refresh).
+        // Erro de rede/5xx = API brevemente fora do ar → mantém cache, o usuário continua logado.
+        if (!cancelled && !isAuthRejection(err) && isNetworkError(err)) {
+          // mantém user/accessToken vindos do cache
+        } else {
+          safeRemove(ACCESS_KEY);
+          safeRemove(REFRESH_KEY);
+          writeCachedUser(null);
+          if (!cancelled) setAccessToken(null);
+          if (!cancelled) setUser(null);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -138,15 +192,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (msg.type === "login" && msg.access && msg.refresh && msg.user) {
           setAccessToken(msg.access);
           setUser(msg.user);
+          writeCachedUser(msg.user);
         } else if (msg.type === "logout") {
           setAccessToken(null);
           setUser(null);
+          writeCachedUser(null);
         } else if (msg.type === "refresh" && msg.access && msg.refresh) {
           setAccessToken(msg.access);
           // user permanece o mesmo; opcionalmente revalidar em background
           void fetchMe(msg.access)
             .then((me) => {
-              if (me) setUser(me);
+              if (me) {
+                setUser(me);
+                writeCachedUser(me);
+              }
             })
             .catch(() => {});
         } else if (msg.type === "sync-request") {
@@ -204,6 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function setSession(nextUser: AuthUser, access: string, refresh: string) {
     safeSet(ACCESS_KEY, access);
     safeSet(REFRESH_KEY, refresh);
+    writeCachedUser(nextUser);
     setAccessToken(access);
     setUser(nextUser);
     try {
@@ -216,6 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function logout() {
     safeRemove(ACCESS_KEY);
     safeRemove(REFRESH_KEY);
+    writeCachedUser(null);
     setAccessToken(null);
     setUser(null);
     try {
@@ -230,7 +291,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token) return null;
     try {
       const me = await fetchMe(token);
-      if (me) setUser(me);
+      if (me) {
+        setUser(me);
+        writeCachedUser(me);
+      }
       return me;
     } catch {
       return null;

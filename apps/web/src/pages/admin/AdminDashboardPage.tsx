@@ -16,7 +16,7 @@ export function AdminDashboardPage() {
   const [clients, setClients] = useState<ClientListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", modality: "ONLINE" as "ONLINE" | "PRESENCIAL" });
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -43,7 +43,7 @@ export function AdminDashboardPage() {
     setFormError(null);
     try {
       await adminApi.createClient(form, accessToken);
-      setForm({ name: "", email: "", password: "" });
+      setForm({ name: "", email: "", password: "", modality: "ONLINE" });
       setShowForm(false);
       load();
     } catch (err) {
@@ -97,6 +97,15 @@ export function AdminDashboardPage() {
                 autoComplete="off"
               />
             </div>
+            <label style={{ display: "flex", gap: "var(--sp-2)", alignItems: "center", fontSize: "0.875rem", color: "var(--text-secondary)" }}>
+              <input
+                type="checkbox"
+                checked={form.modality === "PRESENCIAL"}
+                onChange={(e) => setForm({ ...form, modality: e.target.checked ? "PRESENCIAL" : "ONLINE" })}
+                style={{ accentColor: "var(--accent)" }}
+              />
+              Aluno/paciente presencial (acesso livre, sem cobrança pela plataforma)
+            </label>
             {formError && <p style={{ color: "var(--danger)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{formError}</p>}
             <div style={{ display: "flex", gap: "var(--sp-3)" }}>
               <Button type="submit" disabled={saving} style={{ height: 40 }}>
@@ -161,7 +170,7 @@ export function AdminDashboardPage() {
                     <span style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)" }}>{client.email}</span>
                     <span style={{ display: "flex", gap: "var(--sp-2)", flexWrap: "wrap" }}>
                       <Badge tone={status.tone}>{status.label}</Badge>
-                      {client.subscriptions[0] && <Badge>{client.subscriptions[0].plan.name}</Badge>}
+                      {client.modality === "PRESENCIAL" ? <Badge tone="accent">Presencial</Badge> : client.subscriptions[0] && <Badge>{client.subscriptions[0].plan.name}</Badge>}
                     </span>
                   </Link>
                   <span style={{ display: "flex", gap: "var(--sp-2)", alignItems: "center", justifyContent: "flex-end" }}>

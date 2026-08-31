@@ -16,6 +16,13 @@ enum Role {
   PROFESSIONAL
 }
 
+// Modalidade de atendimento: ONLINE = consultoria com contratação/pagamento pela plataforma;
+// PRESENCIAL = aluno/paciente presencial, acesso livre à área dele (cobranças via WhatsApp, fora da plataforma).
+enum Modality {
+  ONLINE
+  PRESENCIAL
+}
+
 enum PlanCode {
   ESSENCIAL
   PLUS
@@ -91,6 +98,7 @@ model User {
   appleId      String?   @unique
   name         String
   role         Role      @default(CLIENT)
+  modality     Modality  @default(ONLINE)
   consentedAt  DateTime?
   pushToken    String? // FCM — estrutura pronta, ativação em fase posterior (escopo.md §13.0)
   stripeCustomerId String? @unique // id do Customer no Stripe — criado sob demanda no checkout

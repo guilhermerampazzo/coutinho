@@ -63,10 +63,12 @@ export function App() {
         }
       />
 
+      {/* Painel é a área central do cliente desde a criação da conta — recursos são liberados conforme
+          o status (CTA comercial até contratar; presencial tem acesso livre sem cobrança). */}
       <Route
         path="/app"
         element={
-          <ProtectedRoute requireSubscription>
+          <ProtectedRoute>
             <DashboardPage />
           </ProtectedRoute>
         }

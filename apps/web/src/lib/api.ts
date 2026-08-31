@@ -42,11 +42,15 @@ async function doRefresh(): Promise<string | null> {
         body: JSON.stringify({ refreshToken: rt }),
       });
       if (!res.ok) {
-        try {
-          localStorage.removeItem(ACCESS_KEY);
-          localStorage.removeItem(REFRESH_KEY);
-        } catch {
-          // ignore
+        // Só derruba a sessão se o servidor rejeitou o refresh explicitamente (401/403).
+        // 5xx/rede = transitório — mantém os tokens para tentar de novo depois.
+        if (res.status === 401 || res.status === 403) {
+          try {
+            localStorage.removeItem(ACCESS_KEY);
+            localStorage.removeItem(REFRESH_KEY);
+          } catch {
+            // ignore
+          }
         }
         return null;
       }
@@ -97,6 +101,8 @@ export interface AuthUser {
   email: string;
   name: string;
   role: "CLIENT" | "PROFESSIONAL";
+  /** ONLINE = consultoria com contratação; PRESENCIAL = acesso livre, cobranças fora da plataforma. */
+  modality: "ONLINE" | "PRESENCIAL";
   hasActiveSubscription: boolean;
   activePlanName?: string;
   hadSubscription: boolean;
@@ -108,11 +114,14 @@ export interface AuthResponse {
 }
 
 export const authApi = {
-  register: (data: { email: string; password: string; name: string; consent: boolean }) =>
+  register: (data: { email: string; password: string; name: string; consent: boolean; modality?: "ONLINE" | "PRESENCIAL" }) =>
     request<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
   login: (data: { email: string; password: string }) =>
     request<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(data) }),
   me: (token: string) => request<AuthUser>("/auth/me", {}, token),
+  /** "Qual atendimento você deseja?" — escolhe presencial após criar a conta. */
+  chooseModality: (modality: "ONLINE" | "PRESENCIAL", token: string) =>
+    request<AuthUser>("/auth/modality", { method: "POST", body: JSON.stringify({ modality }) }, token),
   refresh: (refreshToken: string) =>
     request<{ tokens: { accessToken: string; refreshToken: string } }>("/auth/refresh", {
       method: "POST",
@@ -192,6 +201,7 @@ export interface ClientListItem {
   id: string;
   name: string;
   email: string;
+  modality: "ONLINE" | "PRESENCIAL";
   anamnesis: { status: string; submittedAt: string | null } | null;
   subscriptions: { status: string; plan: { name: string } }[];
 }
@@ -199,8 +209,12 @@ export interface ClientListItem {
 export const adminApi = {
   listClients: (token: string) => request<ClientListItem[]>("/admin/clients", {}, token),
   /** Cadastro manual de cliente pela recepção. */
-  createClient: (data: { name: string; email: string; password: string }, token: string) =>
-    request<{ id: string; name: string; email: string }>("/admin/clients", { method: "POST", body: JSON.stringify(data) }, token),
+  createClient: (data: { name: string; email: string; password: string; modality?: "ONLINE" | "PRESENCIAL" }, token: string) =>
+    request<{ id: string; name: string; email: string }>(
+      "/admin/clients",
+      { method: "POST", body: JSON.stringify(data) },
+      token
+    ),
   /** Remove o cadastro (anonimiza + cancela cobranças) — a conta some da lista. */
   removeClient: (id: string, token: string) => request<{ ok: boolean }>(`/admin/clients/${id}`, { method: "DELETE" }, token),
   clientDetail: (id: string, token: string) => request<any>(`/admin/clients/${id}`, {}, token),

@@ -122,6 +122,9 @@ export default function LandingCinematic() {
 
             <div style={{ display: "flex", gap: "var(--sp-4)", flexWrap: "wrap" }}>
               <Button href={`${APP_URL}/criar-conta`}>Iniciar meu plano</Button>
+              <Button variant="secondary" href={`${APP_URL}/criar-conta?modalidade=presencial`}>
+                Sou aluno/paciente presencial
+              </Button>
               <Button variant="secondary" href="#como-funciona">
                 Como funciona
               </Button>

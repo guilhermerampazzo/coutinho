@@ -48,6 +48,10 @@ export class PaymentsService {
       this.prisma.plan.findUnique({ where: { code: dto.planCode as PlanCode } }),
     ]);
     if (!plan) throw new NotFoundException("Plano não encontrado.");
+    // Cliente presencial tem acesso livre — as cobranças são tratadas fora da plataforma (WhatsApp).
+    if (user.modality === "PRESENCIAL") {
+      throw new BadRequestException("Contas de atendimento presencial não contratam planos pela plataforma.");
+    }
 
     let coupon = null;
     if (dto.couponCode) {

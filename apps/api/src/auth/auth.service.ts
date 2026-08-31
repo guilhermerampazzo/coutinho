@@ -1,7 +1,7 @@
 import { ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as argon2 from "argon2";
-import { Role } from "@prisma/client";
+import { Modality, Role } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
@@ -23,8 +23,9 @@ export class AuthService {
     };
   }
 
-  /** Assinatura ativa só existe depois do pagamento aprovado (ver PaymentsService.checkout). */
-  private async publicUser(user: { id: string; email: string; name: string; role: Role }) {
+  /** Assinatura ativa só existe depois do pagamento aprovado (ver PaymentsService.checkout).
+   *  Cliente PRESENCIAL tem acesso livre à área dele (cobranças tratadas fora da plataforma). */
+  private async publicUser(user: { id: string; email: string; name: string; role: Role; modality: Modality }) {
     const [activeSubscription, anySubscription] = await Promise.all([
       this.prisma.subscription.findFirst({
         where: { userId: user.id, status: "ACTIVE" },
@@ -38,8 +39,10 @@ export class AuthService {
       email: user.email,
       name: user.name,
       role: user.role,
-      hasActiveSubscription: Boolean(activeSubscription),
-      activePlanName: activeSubscription?.plan.name,
+      modality: user.modality,
+      hasActiveSubscription: Boolean(activeSubscription) || user.modality === Modality.PRESENCIAL,
+      activePlanName:
+        activeSubscription?.plan.name ?? (user.modality === Modality.PRESENCIAL ? "Atendimento presencial" : undefined),
       // Distingue "nunca assinou" (tela de boas-vindas) de "assinou e expirou/cancelou" (tela de renovação).
       hadSubscription: Boolean(anySubscription),
     };
@@ -54,10 +57,33 @@ export class AuthService {
 
     const passwordHash = await argon2.hash(dto.password);
     const user = await this.prisma.user.create({
-      data: { email: dto.email, name: dto.name, passwordHash, consentedAt: new Date() },
+      data: {
+        email: dto.email,
+        name: dto.name,
+        passwordHash,
+        consentedAt: new Date(),
+        modality: dto.modality ?? Modality.ONLINE,
+      },
     });
 
     return { user: await this.publicUser(user), tokens: this.issueTokens(user) };
+  }
+
+  /**
+   * Escolha de atendimento pós-cadastro ("Online ou presencial?").
+   * Só permite ONLINE → PRESENCIAL (quem contrata plano online mantém o fluxo pago;
+   * presencial nunca é revogado automaticamente).
+   */
+  async chooseModality(userId: string, modality: Modality) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+    if (user.role !== Role.CLIENT) throw new ConflictException("Apenas clientes escolhem modalidade de atendimento.");
+    if (user.modality === modality) return this.publicUser(user);
+    if (user.modality !== Modality.ONLINE || modality !== Modality.PRESENCIAL) {
+      throw new ConflictException("Esta conta já possui uma modalidade de atendimento.");
+    }
+    const updated = await this.prisma.user.update({ where: { id: userId }, data: { modality } });
+    return this.publicUser(updated);
   }
 
   async login(dto: LoginDto) {

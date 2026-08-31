@@ -60,6 +60,12 @@ export default function LandingClinical() {
             <a href="#como-funciona" style={{ fontSize: "var(--fs-body-sm)", color: "var(--gray-100)", borderBottom: "1px solid var(--border-hairline)", paddingBottom: 2 }}>
               Como funciona
             </a>
+            <a
+              href={`${APP_URL}/criar-conta?modalidade=presencial`}
+              style={{ fontSize: "var(--fs-body-sm)", color: "var(--gray-100)", borderBottom: "1px solid var(--border-hairline)", paddingBottom: 2 }}
+            >
+              Sou aluno/paciente presencial
+            </a>
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--sp-4)" }}>

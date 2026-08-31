@@ -21,15 +21,15 @@ export function ProtectedRoute({
 
   useEffect(() => {
     if (loading || liveChecked) return;
-    if (user?.role !== "CLIENT" || user.hasActiveSubscription) return;
+    if (user?.role !== "CLIENT" || user.modality === "PRESENCIAL" || user.hasActiveSubscription) return;
     setLiveChecked(true);
     void refreshUser();
-  }, [loading, liveChecked, user?.role, user?.hasActiveSubscription, refreshUser]);
+  }, [loading, liveChecked, user?.role, user?.modality, user?.hasActiveSubscription, refreshUser]);
 
   if (loading) return null;
   if (!user) return <Navigate to={`/entrar?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   if (role && user.role !== role) return <Navigate to="/app" replace />;
-  if (requireSubscription && user.role === "CLIENT" && !user.hasActiveSubscription) {
+  if (requireSubscription && user.role === "CLIENT" && user.modality !== "PRESENCIAL" && !user.hasActiveSubscription) {
     // Aguarda o refresh ao vivo antes de decidir — evita o "flash" de redirecionamento errado.
     if (!liveChecked) return null;
     // Quem já teve alguma assinatura (expirou/cancelou) vê a tela de renovação; quem nunca
