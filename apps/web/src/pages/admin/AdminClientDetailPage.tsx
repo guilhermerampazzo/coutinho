@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Button, Card, TextField, LineChart } from "@couthealth/ui";
-import { adminApi, foodsApi, exercisesApi, ApiError, type FoodItem, type FoodCategory, type ExerciseItem, type MuscleGroup, type Assessment } from "../../lib/api";
+import { adminApi, foodsApi, exercisesApi, professionalProfileApi, ApiError, type FoodItem, type FoodCategory, type ExerciseItem, type MuscleGroup, type Assessment } from "../../lib/api";
+import { mealPlanPdfHtml, workoutPdfHtml, openPdfWindow } from "../../lib/pdf";
 import { useAuth } from "../../lib/auth";
 import { AdminLayout } from "./AdminLayout";
 
@@ -402,7 +403,9 @@ function CompositionTab({ clientId, assessments: initial, onRefresh }: { clientI
 }
 
 // ---- TAB: PLANO ALIMENTAR ----
-type MealDraft = { id: string; time: string; name: string; notes?: string; items: { tmpId: string; foodId: string; food: FoodItem; quantity: number; unit: string; notes?: string }[] };
+type SubstituteDraft = { tmpId: string; foodId: string; food: FoodItem; quantity: number; unit: string };
+type MealItemDraft = { tmpId: string; foodId: string; food: FoodItem; quantity: number; unit: string; notes?: string; substitutes: SubstituteDraft[] };
+type MealDraft = { id: string; time: string; name: string; notes?: string; items: MealItemDraft[] };
 function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished: () => void }) {
   const { accessToken } = useAuth();
   const [title, setTitle] = useState(`Plano alimentar — ${new Date().toLocaleDateString("pt-BR")}`);
@@ -422,6 +425,12 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
   const [history, setHistory] = useState<any[]>([]);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  // Substitutos (estilo Nutrium): alimento clicável abre o modal de "Substitutos".
+  const [subModal, setSubModal] = useState<{ mealId: string; tmpId: string } | null>(null);
+  const [subSearch, setSubSearch] = useState("");
+  const [subResults, setSubResults] = useState<FoodItem[]>([]);
+  const [subQty, setSubQty] = useState("100");
+  const [subUnit, setSubUnit] = useState<string>("Gramas");
 
   useEffect(() => {
     foodsApi.categories().then(setCategories);
@@ -437,6 +446,10 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
     if (search.length < 2) return setResults([]);
     foodsApi.list(search, categoryId).then(setResults);
   }, [search, categoryId]);
+  useEffect(() => {
+    if (!subModal || subSearch.length < 2) return setSubResults([]);
+    foodsApi.list(subSearch).then(setSubResults);
+  }, [subSearch, subModal]);
 
   const addMeal = () => {
     const id = `m${Date.now()}`;
@@ -458,10 +471,37 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
   };
 
   const addFoodToMeal = (food: FoodItem) => {
-    setMeals((prev) => prev.map((m) => (m.id === activeMeal ? { ...m, items: [...m.items, { tmpId: `${Date.now()}`, foodId: food.id, food, quantity: 100, unit: "Gramas" }] } : m)));
+    setMeals((prev) => prev.map((m) => (m.id === activeMeal ? { ...m, items: [...m.items, { tmpId: `${Date.now()}`, foodId: food.id, food, quantity: 100, unit: "Gramas", substitutes: [] }] } : m)));
     setSearch("");
     setResults([]);
   };
+
+  function addSubstitute(food: FoodItem) {
+    if (!subModal) return;
+    const qty = Number(subQty) || 100;
+    setMeals((prev) =>
+      prev.map((m) =>
+        m.id === subModal.mealId
+          ? {
+              ...m,
+              items: m.items.map((it) =>
+                it.tmpId === subModal.tmpId
+                  ? { ...it, substitutes: [...(it.substitutes ?? []), { tmpId: `${Date.now()}`, foodId: food.id, food, quantity: qty, unit: subUnit }] }
+                  : it
+              ),
+            }
+          : m
+      )
+    );
+    setSubSearch("");
+    setSubResults([]);
+  }
+
+  function removeSubstitute(mealId: string, tmpId: string, subTmpId: string) {
+    setMeals((prev) =>
+      prev.map((m) => (m.id === mealId ? { ...m, items: m.items.map((it) => (it.tmpId === tmpId ? { ...it, substitutes: (it.substitutes ?? []).filter((s) => s.tmpId !== subTmpId) } : it)) } : m))
+    );
+  }
 
   const updateItem = (mealId: string, tmpId: string, patch: any) => {
     setMeals((prev) => prev.map((m) => (m.id === mealId ? { ...m, items: m.items.map((it) => (it.tmpId === tmpId ? { ...it, ...patch } : it)) } : m)));
@@ -500,6 +540,7 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
             quantity: it.quantity,
             unit: it.unit,
             notes: it.notes,
+            substitutes: (it.substitutes ?? []).map((s) => ({ foodId: s.foodId, quantity: s.quantity, unit: s.unit })),
           })),
         })),
       };
@@ -513,22 +554,20 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
     }
   }
 
-  const openPdf = (plan: any) => {
-    const w = window.open("", "_blank");
-    if (!w) return;
-    const html = `
-      <html><head><title>${plan.title ?? "Plano alimentar"}</title>
-      <style>body{font-family:Inter, sans-serif; color:#17181b; padding:40px} h1{font-family:'Space Grotesk', sans-serif} .meal{border:1px solid #e5e7eb; border-radius:14px; padding:16px; margin-bottom:16px} .item{display:flex; justify-content:space-between; border-bottom:1px solid #f3f4f6; padding:8px 0} .kcal{color:#4a4f54; font-size:12px}</style>
-      </head><body>
-      <h1 style="color:#f7be00">COUT — ${plan.title ?? ""}</h1>
-      <p style="color:#6b7280">${new Date(plan.createdAt).toLocaleDateString("pt-BR")} • ${plan.meals?.length ?? 0} refeições</p>
-      ${(plan.meals ?? []).map((m: any) => `<div class="meal"><strong>${m.time} — ${m.name}</strong>${m.notes ? `<p style="color:#6b7280">${m.notes}</p>` : ""}${(m.items ?? []).map((it: any) => `<div class="item"><span>${it.food?.name ?? it.foodId} — ${it.quantity ?? it.quantityGrams} ${it.unit ?? "Gramas"}</span><span class="kcal">${it.food ? Math.round((it.food.kcal * (it.quantityGrams ?? 100))/100) : ""} kcal</span></div>`).join("")}</div>`).join("")}
-      <p style="margin-top:32px; font-size:12px; color:#9ca3af">Documento gerado por CoutHealth — acompanhamento profissional contínuo.</p>
-      </body></html>`;
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    setTimeout(() => w.print(), 300);
+  const openPdf = async (plan: any) => {
+    if (!accessToken) return;
+    setStatus("Gerando PDF…");
+    try {
+      const [pro, client] = await Promise.all([
+        professionalProfileApi.get(accessToken),
+        adminApi.clientDetail(clientId, accessToken),
+      ]);
+      openPdfWindow(plan.title ?? "Plano alimentar", mealPlanPdfHtml(plan, pro, client));
+    } catch {
+      setStatus("Não foi possível gerar o PDF.");
+    } finally {
+      setStatus(null);
+    }
   };
 
   return (
@@ -635,20 +674,34 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
                 {meal.items.length > 0 ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {meal.items.map((it) => (
-                      <div key={it.tmpId} style={{ display: "grid", gridTemplateColumns: "1fr 90px 160px auto auto", gap: 8, alignItems: "center", background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: 8, padding: 10 }}>
-                        <span style={{ fontWeight: 600, fontSize: "var(--fs-body-sm)" }}>{it.food.name}</span>
-                        <input type="number" value={it.quantity} onChange={(e) => updateItem(meal.id, it.tmpId, { quantity: Number(e.target.value) })} style={{ background: "var(--bg-base)", border: "1px solid var(--border-hairline)", color: "var(--text-primary)", borderRadius: 8, padding: "8px", width: "100%" }} />
-                        <select value={it.unit} onChange={(e) => updateItem(meal.id, it.tmpId, { unit: e.target.value })} style={{ background: "var(--bg-base)", border: "1px solid var(--border-hairline)", color: "var(--text-primary)", borderRadius: 8, padding: "8px" }}>
-                          {UNITS.map((u) => (
-                            <option key={u} value={u}>{u}</option>
-                          ))}
-                        </select>
-                        <span style={{ fontSize: "var(--fs-caption)", color: "var(--accent)", fontWeight: 600, whiteSpace: "nowrap" }}>{kcalForFood(it.food, it.quantity, it.unit)} kcal</span>
-                        <div style={{ display: "flex", gap: 4 }}>
-                          <button onClick={() => moveItem(meal.id, it.tmpId, -1)} style={{ background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 6px", cursor: "pointer" }}>↑</button>
-                          <button onClick={() => moveItem(meal.id, it.tmpId, 1)} style={{ background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 6px", cursor: "pointer" }}>↓</button>
-                          <button onClick={() => removeItem(meal.id, it.tmpId)} style={{ background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>✕</button>
+                      <div key={it.tmpId} style={{ display: "flex", flexDirection: "column", gap: 6, background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: 8, padding: 10 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 160px auto auto", gap: 8, alignItems: "center" }}>
+                          <button
+                            type="button"
+                            title="Clique para gerenciar substitutos"
+                            onClick={() => { setSubModal({ mealId: meal.id, tmpId: it.tmpId }); setSubSearch(""); setSubResults([]); }}
+                            style={{ background: "transparent", border: 0, padding: 0, textAlign: "left", cursor: "pointer", fontWeight: 600, fontSize: "var(--fs-body-sm)", color: "var(--text-primary)", textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 3 }}
+                          >
+                            {it.food.name} {(it.substitutes ?? []).length > 0 ? <span style={{ fontSize: 11, color: "var(--accent)", textDecoration: "none" }}>• {it.substitutes.length} subst.</span> : <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 400, textDecoration: "none" }}>• + substitutos</span>}
+                          </button>
+                          <input type="number" value={it.quantity} onChange={(e) => updateItem(meal.id, it.tmpId, { quantity: Number(e.target.value) })} style={{ background: "var(--bg-base)", border: "1px solid var(--border-hairline)", color: "var(--text-primary)", borderRadius: 8, padding: "8px", width: "100%" }} />
+                          <select value={it.unit} onChange={(e) => updateItem(meal.id, it.tmpId, { unit: e.target.value })} style={{ background: "var(--bg-base)", border: "1px solid var(--border-hairline)", color: "var(--text-primary)", borderRadius: 8, padding: "8px" }}>
+                            {UNITS.map((u) => (
+                              <option key={u} value={u}>{u}</option>
+                            ))}
+                          </select>
+                          <span style={{ fontSize: "var(--fs-caption)", color: "var(--accent)", fontWeight: 600, whiteSpace: "nowrap" }}>{kcalForFood(it.food, it.quantity, it.unit)} kcal</span>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button onClick={() => moveItem(meal.id, it.tmpId, -1)} style={{ background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 6px", cursor: "pointer" }}>↑</button>
+                            <button onClick={() => moveItem(meal.id, it.tmpId, 1)} style={{ background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 6px", cursor: "pointer" }}>↓</button>
+                            <button onClick={() => removeItem(meal.id, it.tmpId)} style={{ background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>✕</button>
+                          </div>
                         </div>
+                        {(it.substitutes ?? []).length > 0 && (
+                          <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, paddingLeft: 2 }}>
+                            ou {(it.substitutes ?? []).map((s: any) => `${s.quantity} ${String(s.unit ?? "").toLowerCase()} de ${s.food.name}`).join(" ou ")}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -659,6 +712,44 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
             ))}
         </div>
       </div>
+      {subModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setSubModal(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: 14, padding: 20, width: "100%", maxWidth: 560, maxHeight: "85vh", overflow: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+            <h3 style={{ margin: 0 }}>Substitutos — {meals.flatMap((m) => m.items).find((i) => i.tmpId === subModal.tmpId)?.food.name}</h3>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)" }}>Cadastre outros alimentos que o paciente poderá usar no lugar deste item. Aparecem no plano e no PDF como “ou …”.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {(meals.flatMap((m) => (m.id === subModal.mealId ? m.items : [])).find((i) => i.tmpId === subModal.tmpId)?.substitutes ?? []).map((s: any) => (
+                <div key={s.tmpId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-base)", borderRadius: 8, padding: "8px 10px", fontSize: 13 }}>
+                  <span>{s.quantity} {s.unit} de {s.food.name}</span>
+                  <button onClick={() => removeSubstitute(subModal.mealId, subModal.tmpId, s.tmpId)} style={{ background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Remover</button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 140px", gap: 8 }}>
+              <TextField label="Buscar substituto" value={subSearch} onChange={(e) => setSubSearch(e.target.value)} placeholder="Ex: Banana, Maçã…" />
+              <TextField label="Qtd" type="number" value={subQty} onChange={(e) => setSubQty(e.target.value)} />
+              <div>
+                <label style={{ display: "block", fontSize: "var(--fs-caption)", color: "var(--text-tertiary)", marginBottom: 6 }}>Unidade</label>
+                <select value={subUnit} onChange={(e) => setSubUnit(e.target.value)} style={{ background: "var(--bg-base)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-md)", color: "var(--text-primary)", padding: "10px 12px", width: "100%" }}>
+                  {UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
+                </select>
+              </div>
+            </div>
+            {subResults.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 180, overflow: "auto", background: "var(--bg-base)", border: "1px solid var(--border-hairline)", borderRadius: 8, padding: 6 }}>
+                {subResults.map((food) => (
+                  <button key={food.id} type="button" onClick={() => addSubstitute(food)} style={{ textAlign: "left", background: "transparent", border: 0, padding: "6px 8px", color: "var(--text-primary)", cursor: "pointer", display: "flex", justifyContent: "space-between" }}>
+                    <span>{food.name}</span><span style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)" }}>{food.kcal} kcal/100g</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <Button onClick={() => setSubModal(null)}>Concluir</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -713,23 +804,20 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
     }
   }
 
-  const openPdf = (w: any) => {
-    const win = window.open("", "_blank");
-    if (!win) return;
-    const html = `
-      <html><head><title>${w.title ?? `Treino ${w.letter}`}</title>
-      <style>body{font-family:Inter, sans-serif; color:#17181b; padding:40px} h1{font-family:'Space Grotesk', sans-serif} table{width:100%; border-collapse:collapse; margin-top:16px} th{text-align:left; border-bottom:2px solid #111; padding:8px; font-size:12px; color:#6b7280} td{padding:10px 8px; border-bottom:1px solid #e5e7eb; font-size:13px} .badge{background:#f7be00; color:#17181b; padding:4px 10px; border-radius:999px; font-weight:700}</style>
-      </head><body>
-      <h1><span class="badge">Treino ${w.letter}</span> ${w.title ?? ""}</h1>
-      <p style="color:#6b7280">${new Date(w.createdAt).toLocaleDateString("pt-BR")}</p>
-      <table><thead><tr><th>Exercício</th><th>Séries</th><th>Repetições</th><th>Carga</th><th>Intervalo</th><th>Obs</th></tr></thead>
-      <tbody>${(w.exercises ?? []).map((ex: any) => `<tr><td><strong>${ex.exercise?.name ?? ex.exerciseId}</strong></td><td>${ex.sets}</td><td>${ex.reps}</td><td>${ex.load ?? "—"}</td><td>${ex.restSeconds ? ex.restSeconds + "s" : "—"}</td><td>${ex.notes ?? ""}</td></tr>`).join("")}</tbody></table>
-      <p style="margin-top:32px; font-size:12px; color:#9ca3af">COUT — Plano de treino. Acompanhamento profissional contínuo.</p>
-      </body></html>`;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 300);
+  const openPdf = async (w: any) => {
+    if (!accessToken) return;
+    setStatus("Gerando PDF…");
+    try {
+      const [pro, client] = await Promise.all([
+        professionalProfileApi.get(accessToken),
+        adminApi.clientDetail(clientId, accessToken),
+      ]);
+      openPdfWindow(w.title ?? `Treino ${w.letter}`, workoutPdfHtml(w, pro, client));
+    } catch {
+      setStatus("Não foi possível gerar o PDF.");
+    } finally {
+      setStatus(null);
+    }
   };
 
   const grouped = useMemo(() => {

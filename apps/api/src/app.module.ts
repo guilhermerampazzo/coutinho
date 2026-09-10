@@ -20,6 +20,7 @@ import { CheckInsModule } from "./checkins/checkins.module";
 import { AdminNotificationsModule } from "./admin-notifications/admin-notifications.module";
 import { AdminSubscriptionsModule } from "./admin-subscriptions/admin-subscriptions.module";
 import { AuditModule } from "./audit/audit.module";
+import { ProfessionalProfileModule } from "./professional-profile/professional-profile.module";
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { AuditModule } from "./audit/audit.module";
     AdminNotificationsModule,
     AdminSubscriptionsModule,
     AuditModule,
+    ProfessionalProfileModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

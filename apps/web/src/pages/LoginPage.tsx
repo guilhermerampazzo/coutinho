@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link, Navigate } from "react-router-dom";
 import { AppleIcon, Button, GoogleIcon, TextField } from "@couthealth/ui";
 import { authApi, ApiError, API_URL } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -13,9 +13,15 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const appleEnabled = useAppleLoginEnabled();
-  const { setSession } = useAuth();
+  const { user, loading, setSession } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Já autenticado (nova aba com sessão persistida) — não mostra o form de login,
+  // redireciona direto para o destino. Evita a sensação de "pediu login de novo".
+  if (!loading && user) {
+    return <Navigate to={resolveRedirectTarget(location.search, user.role)} replace />;
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();

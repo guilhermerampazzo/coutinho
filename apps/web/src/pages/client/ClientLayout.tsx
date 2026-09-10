@@ -42,10 +42,18 @@ function NavIcon({ path }: { path: string }) {
 }
 
 export function ClientLayout({ title, children }: { title?: string; children: ReactNode }) {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user, refreshUser } = useAuth();
 
   useEffect(() => {
     if (accessToken) initPushNotifications(accessToken);
+  }, [accessToken]);
+
+  // Revalida /auth/me ao montar o painel — o `user` em cache (localStorage) pode estar
+  // desatualizado (ex.: pagamento aprovado em outra aba → sidebar mostrava "Sem plano
+  // ativo" mesmo com plano ACTIVE). Sem isso o bug "conta teste com plano ativo" persistia.
+  useEffect(() => {
+    if (accessToken) void refreshUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
   return (

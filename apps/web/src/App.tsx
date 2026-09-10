@@ -21,6 +21,7 @@ import { AdminExercisesPage } from "./pages/admin/AdminExercisesPage";
 import { AdminNotificationsPage } from "./pages/admin/AdminNotificationsPage";
 import { AdminCouponsPage } from "./pages/admin/AdminCouponsPage";
 import { AdminSubscriptionsPage } from "./pages/admin/AdminSubscriptionsPage";
+import { AdminSettingsPage } from "./pages/admin/AdminSettingsPage";
 import { ProtectedRoute } from "./lib/ProtectedRoute";
 
 function Placeholder({ title }: { title: string }) {
@@ -184,6 +185,14 @@ export function App() {
         element={
           <ProtectedRoute role="PROFESSIONAL">
             <AdminSubscriptionsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/configuracoes"
+        element={
+          <ProtectedRoute role="PROFESSIONAL">
+            <AdminSettingsPage />
           </ProtectedRoute>
         }
       />

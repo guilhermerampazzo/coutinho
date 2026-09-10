@@ -39,7 +39,7 @@ export class ClientController {
     return this.prisma.mealPlan.findFirst({
       where: { clientId: req.user.userId, publishedAt: { not: null } },
       orderBy: { publishedAt: "desc" },
-      include: { meals: { include: { items: { include: { food: true } } } } },
+      include: { meals: { include: { items: { include: { food: true, substitutes: { include: { food: true } } } } } } },
     });
   }
 
@@ -70,7 +70,7 @@ export class ClientController {
     const [anamnesis, assessments, mealPlans, workouts, checkIns, messages, subscriptions] = await Promise.all([
       this.prisma.anamnesis.findUnique({ where: { userId } }),
       this.prisma.assessment.findMany({ where: { userId } }),
-      this.prisma.mealPlan.findMany({ where: { clientId: userId }, include: { meals: { include: { items: { include: { food: true } } } } } }),
+      this.prisma.mealPlan.findMany({ where: { clientId: userId }, include: { meals: { include: { items: { include: { food: true, substitutes: { include: { food: true } } } } } } } }),
       this.prisma.workout.findMany({ where: { clientId: userId }, include: { exercises: { include: { exercise: true } } } }),
       this.prisma.checkIn.findMany({ where: { userId } }),
       this.prisma.message.findMany({ where: { thread: { clientId: userId } } }),

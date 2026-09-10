@@ -32,7 +32,9 @@ export class AdminClientsService {
         modality: true,
         createdAt: true,
         anamnesis: { select: { status: true, submittedAt: true } },
-        subscriptions: { orderBy: { createdAt: "desc" }, take: 1, select: { status: true, plan: { select: { name: true } } } },
+        // Traz as últimas para o painel distinguir ACTIVE de PENDING (evita mostrar
+        // "plano" quando é só uma tentativa pendente, e vice-versa).
+        subscriptions: { orderBy: { createdAt: "desc" }, take: 5, select: { status: true, plan: { select: { name: true } } } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -111,7 +113,7 @@ export class AdminClientsService {
         anamnesis: true,
         assessments: { orderBy: { recordedAt: "asc" } },
         subscriptions: { orderBy: { createdAt: "desc" }, take: 1, include: { plan: true } },
-        mealPlans: { orderBy: { createdAt: "desc" }, include: { meals: { include: { items: { include: { food: true } } } } } },
+        mealPlans: { orderBy: { createdAt: "desc" }, include: { meals: { include: { items: { include: { food: true, substitutes: { include: { food: true } } } } } } } },
         workouts: { orderBy: { createdAt: "desc" }, include: { exercises: { include: { exercise: true } } } },
       },
     });
@@ -124,7 +126,7 @@ export class AdminClientsService {
     return this.prisma.mealPlan.findMany({
       where: { clientId },
       orderBy: { createdAt: "desc" },
-      include: { meals: { include: { items: { include: { food: true } } } } },
+      include: { meals: { include: { items: { include: { food: true, substitutes: { include: { food: true } } } } } } },
     });
   }
 
@@ -176,12 +178,22 @@ export class AdminClientsService {
                 quantity: item.quantity ?? item.quantityGrams,
                 unit: item.unit ?? "g",
                 notes: item.notes,
+                substitutes: item.substitutes?.length
+                  ? {
+                      create: item.substitutes.map((s) => ({
+                        foodId: s.foodId,
+                        quantity: s.quantity,
+                        unit: s.unit,
+                        notes: s.notes,
+                      })),
+                    }
+                  : undefined,
               })),
             },
           })),
         },
       },
-      include: { meals: { include: { items: true } } },
+      include: { meals: { include: { items: { include: { substitutes: true } } } } },
     });
   }
 

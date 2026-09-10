@@ -17,9 +17,12 @@ export class AuthService {
 
   private issueTokens(user: { id: string; email: string; role: Role }): AuthTokens {
     const payload = { sub: user.id, email: user.email, role: user.role };
+    // Sessão persistente estilo Google (pedido do cliente): access longo para não
+    // derrubar a sessão ao fechar/reabrir aba/navegador; refresh de 90 dias mantém
+    // o login por período adequado. O front renova silenciosamente via /auth/refresh.
     return {
-      accessToken: this.jwt.sign(payload, { secret: process.env.JWT_SECRET, expiresIn: "15m" }),
-      refreshToken: this.jwt.sign(payload, { secret: process.env.JWT_REFRESH_SECRET, expiresIn: "30d" }),
+      accessToken: this.jwt.sign(payload, { secret: process.env.JWT_SECRET, expiresIn: "7d" }),
+      refreshToken: this.jwt.sign(payload, { secret: process.env.JWT_REFRESH_SECRET, expiresIn: "90d" }),
     };
   }
 

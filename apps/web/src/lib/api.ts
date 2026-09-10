@@ -417,3 +417,19 @@ export const paymentsApi = {
   regeneratePix: (subscriptionId: string, token: string) =>
     request<CheckoutResponse>(`/payments/pix/regenerate/${subscriptionId}`, { method: "POST" }, token),
 };
+
+export interface ProfessionalProfile {
+  id: string;
+  name: string;
+  title: string;
+  registration: string;
+  phone: string;
+  email: string;
+  location: string;
+}
+
+export const professionalProfileApi = {
+  get: (token: string) => request<ProfessionalProfile>("/professional-profile", {}, token),
+  update: (data: Partial<ProfessionalProfile>, token: string) =>
+    request<ProfessionalProfile>("/admin/professional-profile", { method: "PATCH", body: JSON.stringify(data) }, token),
+};

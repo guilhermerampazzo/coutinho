@@ -153,6 +153,8 @@ export function AdminDashboardPage() {
             </div>
             {clients.map((client) => {
               const status = statusLabel[client.anamnesis?.status ?? "RASCUNHO"];
+              const activeSub = client.subscriptions.find((s) => s.status === "ACTIVE");
+              const latestSub = client.subscriptions[0];
               return (
                 <div
                   key={client.id}
@@ -170,7 +172,13 @@ export function AdminDashboardPage() {
                     <span style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-caption)" }}>{client.email}</span>
                     <span style={{ display: "flex", gap: "var(--sp-2)", flexWrap: "wrap" }}>
                       <Badge tone={status.tone}>{status.label}</Badge>
-                      {client.modality === "PRESENCIAL" ? <Badge tone="accent">Presencial</Badge> : client.subscriptions[0] && <Badge>{client.subscriptions[0].plan.name}</Badge>}
+                      {client.modality === "PRESENCIAL" ? (
+                        <Badge tone="accent">Presencial</Badge>
+                      ) : activeSub ? (
+                        <Badge tone="accent">{activeSub.plan.name} • ativo</Badge>
+                      ) : latestSub ? (
+                        <Badge>Pagamento pendente ({latestSub.plan.name})</Badge>
+                      ) : null}
                     </span>
                   </Link>
                   <span style={{ display: "flex", gap: "var(--sp-2)", alignItems: "center", justifyContent: "flex-end" }}>

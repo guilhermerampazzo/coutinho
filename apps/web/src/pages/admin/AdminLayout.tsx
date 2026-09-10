@@ -8,6 +8,7 @@ const links = [
   { to: "/admin/notificacoes", label: "Notificações" },
   { to: "/admin/cupons", label: "Cupons" },
   { to: "/admin/assinaturas", label: "Planos & Assinaturas" },
+  { to: "/admin/configuracoes", label: "Configurações" },
 ];
 
 export function AdminLayout({

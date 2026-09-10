@@ -319,6 +319,7 @@ model Food {
   notes      String?
 
   mealItems MealItem[]
+  usedAsSubstitute MealItemSubstitute[] @relation("FoodSubstitutes")
 }
 
 model ExerciseLibrary {
@@ -367,6 +368,38 @@ model MealItem {
   quantity      Float?
   unit          String?
   notes         String?
+
+  // Substitutos estilo Nutrium: cada alimento do plano pode oferecer alternativas
+  // ("ou 1 unidade de ... ou 1/2 unidade de ...") definidas alimento por alimento.
+  substitutes MealItemSubstitute[]
+}
+
+model MealItemSubstitute {
+  id         String   @id @default(cuid())
+  mealItemId String
+  mealItem   MealItem @relation(fields: [mealItemId], references: [id], onDelete: Cascade)
+  foodId     String
+  food       Food     @relation("FoodSubstitutes", fields: [foodId], references: [id])
+  quantity   Float?
+  unit       String?
+  notes      String?
+
+  @@index([mealItemId])
+}
+
+// ---------- Dados do profissional (cabeçalho dos PDFs) ----------
+// Editável pelo gestor em Configurações → Dados do profissional; puxado
+// automaticamente para os PDFs alimentar e de treino.
+model ProfessionalProfile {
+  id           String   @id @default(cuid())
+  name         String   @default("Rafael Coutinho")
+  title        String   @default("Nutricionista")
+  registration String   @default("")
+  phone        String   @default("")
+  email        String   @default("")
+  location     String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Workout {

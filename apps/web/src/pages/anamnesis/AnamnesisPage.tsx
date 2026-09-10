@@ -29,7 +29,13 @@ function serializeValue(q: Question, v: unknown): unknown {
 
 /** Converte o valor persistido de volta para o formato bruto do StepField. */
 function deserializeValue(q: Question, v: unknown): unknown {
-  if (q.type === "chips") return typeof v === "string" && v ? v.split(", ") : [];
+  // Chips: antes do primeiro save o formData guarda array (seleção local); depois do
+  // reload vindo da API é string "a, b". Sem o Array.isArray aqui, o clique no chip
+  // nunca acendia visualmente (bug IMG_8570.mov — Etapa 3 "Quais desses alimentos você gosta?").
+  if (q.type === "chips") {
+    if (Array.isArray(v)) return v;
+    return typeof v === "string" && v ? v.split(", ") : [];
+  }
   // Choice/inputs numéricos: o banco devolve number; o StepField compara com strings
   // (opt.value "6") — sem essa conversão a opção salva nunca aparece selecionada (bug visto
   // em produção: "a escolha trava" ao voltar na pergunta).
@@ -127,8 +133,10 @@ export function AnamnesisPage() {
       for (const q of questions) {
         const raw = formData[q.key];
         if (raw === undefined || raw === null || raw === "") continue;
+        // Chips vazios ([]) não entram no payload — evita salvar "" e sujar o banco.
+        if (q.type === "chips" && Array.isArray(raw) && raw.length === 0) continue;
         const serialized = serializeValue(q, raw);
-        if (serialized !== undefined) payload[q.key] = serialized;
+        if (serialized !== undefined && serialized !== "") payload[q.key] = serialized;
       }
       await anamnesisApi.updateMine(payload, accessToken);
       flashSaved();

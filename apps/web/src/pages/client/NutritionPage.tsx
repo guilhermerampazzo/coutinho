@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@couthealth/ui";
-import { clientApi } from "../../lib/api";
+import { clientApi, professionalProfileApi } from "../../lib/api";
+import { mealPlanPdfHtml, openPdfWindow } from "../../lib/pdf";
 import { useAuth } from "../../lib/auth";
 import { ClientLayout } from "./ClientLayout";
 
@@ -8,6 +9,7 @@ export function NutritionPage() {
   const { accessToken } = useAuth();
   const [mealPlan, setMealPlan] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -17,19 +19,24 @@ export function NutritionPage() {
       .finally(() => setLoading(false));
   }, [accessToken]);
 
-  const openPdf = () => {
-    if (!mealPlan) return;
-    const w = window.open("", "_blank");
-    if (!w) return;
-    const html = `<html><head><title>${mealPlan.title ?? "Plano alimentar"}</title>
-      <style>body{font-family:Inter,sans-serif;color:#17181b;padding:40px} h1{font-family:'Space Grotesk',sans-serif} .meal{border:1px solid #e5e7eb;border-radius:14px;padding:16px;margin-bottom:16px} .item{display:flex;justify-content:space-between;border-bottom:1px solid #f3f4f6;padding:8px 0} .kcal{color:#f5b335;font-weight:600;font-size:12px}</style>
-      </head><body><h1 style="color:#f7be00">COUT — ${mealPlan.title ?? "Plano alimentar"}</h1><p style="color:#6b7280">${mealPlan.meals?.length ?? 0} refeições • ${new Date(mealPlan.publishedAt ?? mealPlan.createdAt).toLocaleDateString("pt-BR")}</p>
-      ${(mealPlan.meals ?? []).map((m: any) => `<div class="meal"><strong>${m.time} — ${m.name}</strong>${m.notes ? `<p style="color:#6b7280">${m.notes}</p>` : ""}${(m.items ?? []).map((it: any) => `<div class="item"><span>${it.food.name} — ${it.quantity ?? it.quantityGrams} ${it.unit ?? "Gramas"}</span><span class="kcal">${Math.round((it.food.kcal * (it.quantityGrams ?? 100))/100)} kcal</span></div>`).join("")}</div>`).join("")}
-      <p style="margin-top:32px;font-size:12px;color:#9ca3af">CoutHealth — acompanhamento profissional contínuo.</p></body></html>`;
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    setTimeout(() => w.print(), 300);
+  const openPdf = async () => {
+    if (!mealPlan || !accessToken) return;
+    setPdfBusy(true);
+    try {
+      const [pro, data] = await Promise.all([
+        professionalProfileApi.get(accessToken),
+        clientApi.dashboard(accessToken).catch(() => null),
+      ]);
+      // clientApi.dashboard não traz anamnese; busca export para dados do cliente (idade/IMC).
+      const full = await clientApi.exportData(accessToken).catch(() => null);
+      const client = full
+        ? { name: full.user?.name, email: full.user?.email, anamnesis: full.anamnesis, assessments: full.assessments }
+        : { name: undefined, email: undefined, anamnesis: {}, assessments: [] };
+      void data;
+      openPdfWindow(mealPlan.title ?? "Plano alimentar", mealPlanPdfHtml(mealPlan, pro, client));
+    } finally {
+      setPdfBusy(false);
+    }
   };
 
   return (
@@ -40,7 +47,7 @@ export function NutritionPage() {
 
         {mealPlan && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "var(--sp-4)" }}>
-            <button onClick={openPdf} style={{ background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 999, padding: "8px 16px", fontSize: "var(--fs-caption)", cursor: "pointer" }}>Baixar PDF</button>
+            <button onClick={openPdf} disabled={pdfBusy} style={{ background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 999, padding: "8px 16px", fontSize: "var(--fs-caption)", cursor: "pointer" }}>{pdfBusy ? "Gerando…" : "Baixar PDF"}</button>
           </div>
         )}
 
@@ -68,6 +75,11 @@ export function NutritionPage() {
                   >
                     <span>
                       {item.food.name} — {item.quantity ?? item.quantityGrams} {item.unit ?? "Gramas"}
+                      {(item.substitutes ?? []).length > 0 && (
+                        <span style={{ color: "var(--text-secondary)" }}>
+                          {" "}ou {(item.substitutes ?? []).map((s: any) => `${s.quantity} ${(s.unit ?? "").toLowerCase()} de ${s.food?.name}`).join(" ou ")}
+                        </span>
+                      )}
                     </span>
                     <span style={{ color: "var(--accent)", fontSize: "var(--fs-caption)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
                       {Math.round((item.food.kcal * (item.quantityGrams ?? 100)) / 100)} kcal
