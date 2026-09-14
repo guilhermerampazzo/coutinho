@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../../lib/auth";
 
 const links = [
   { to: "/admin", label: "Clientes", end: true },
@@ -21,6 +22,16 @@ export function AdminLayout({
   actions?: ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  function handleLogout() {
+    logout();
+    setUserMenuOpen(false);
+    setMenuOpen(false);
+    navigate("/entrar");
+  }
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", background: "var(--bg-base)" }}>
@@ -94,6 +105,92 @@ export function AdminLayout({
             </NavLink>
           ))}
         </nav>
+        <div style={{ marginTop: "auto", padding: "var(--sp-4) var(--sp-6) 0", borderTop: "1px solid var(--border-hairline)", position: "relative" }}>
+          {userMenuOpen && (
+            <>
+              <div style={{ position: "fixed", inset: 0, zIndex: 45 }} onClick={() => setUserMenuOpen(false)} />
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: "calc(100% + 8px)",
+                  left: "var(--sp-4)",
+                  right: "var(--sp-4)",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border-hairline)",
+                  borderRadius: "var(--r-md)",
+                  padding: 6,
+                  zIndex: 46,
+                  boxShadow: "var(--elev, 0 8px 24px rgba(0,0,0,0.4))",
+                }}
+              >
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    background: "transparent",
+                    border: 0,
+                    color: "var(--danger)",
+                    fontSize: "var(--fs-body-sm)",
+                    fontWeight: 600,
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9" />
+                  </svg>
+                  Sair
+                </button>
+              </div>
+            </>
+          )}
+          <button
+            onClick={() => setUserMenuOpen((v) => !v)}
+            title="Clique para ver opções da conta"
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              background: userMenuOpen ? "var(--ink-600)" : "transparent",
+              border: 0,
+              borderRadius: "var(--r-md)",
+              padding: 6,
+              margin: "-6px",
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: "var(--r-full)",
+                background: "var(--bg-card)",
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 700,
+                color: "var(--accent)",
+              }}
+            >
+              {user?.name?.[0]?.toUpperCase() ?? "?"}
+            </div>
+            <div style={{ overflow: "hidden", flex: 1 }}>
+              <div style={{ fontSize: "0.875rem", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text-primary)" }}>
+                {user ? `${user.name} ADM` : "—"}
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Administrador</div>
+            </div>
+            <span style={{ color: "var(--text-tertiary)", fontSize: "0.75rem", flexShrink: 0 }}>{userMenuOpen ? "▲" : "▼"}</span>
+          </button>
+        </div>
       </aside>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <div className="admin-mobile-bar">

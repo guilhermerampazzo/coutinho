@@ -233,6 +233,9 @@ export const adminApi = {
   listMealPlans: (clientId: string, token: string) => request<any[]>(`/admin/clients/${clientId}/meal-plans`, {}, token),
   renameMealPlan: (mealPlanId: string, title: string, token: string) =>
     request<any>(`/admin/meal-plans/${mealPlanId}/title`, { method: "PATCH", body: JSON.stringify({ title }) }, token),
+  /** Edita o conteúdo de um plano já lançado (republica + notifica o cliente). */
+  updateMealPlan: (mealPlanId: string, data: { title?: string; meals: any[] }, token: string) =>
+    request<any>(`/admin/meal-plans/${mealPlanId}`, { method: "PATCH", body: JSON.stringify(data) }, token),
   // Treino — Treino A/B/C/D clicáveis com histórico e título
   createWorkout: (clientId: string, data: { letter: string; title?: string; exercises: any[] }, token: string) =>
     request<any>(`/admin/clients/${clientId}/workout`, { method: "POST", body: JSON.stringify(data) }, token),
@@ -241,6 +244,9 @@ export const adminApi = {
   listWorkouts: (clientId: string, token: string) => request<any[]>(`/admin/clients/${clientId}/workouts`, {}, token),
   renameWorkout: (workoutId: string, title: string, token: string) =>
     request<any>(`/admin/workouts/${workoutId}/title`, { method: "PATCH", body: JSON.stringify({ title }) }, token),
+  /** Edita o conteúdo de um treino já lançado (republica + notifica o cliente). */
+  updateWorkout: (workoutId: string, data: { letter: string; title?: string; exercises: any[] }, token: string) =>
+    request<any>(`/admin/workouts/${workoutId}`, { method: "PATCH", body: JSON.stringify(data) }, token),
   clientMessages: (clientId: string, token: string) => request<any>(`/admin/clients/${clientId}/messages`, {}, token),
   replyToClient: (clientId: string, body: string, token: string) =>
     request<any>(`/admin/clients/${clientId}/messages`, { method: "POST", body: JSON.stringify({ body }) }, token),
@@ -416,6 +422,43 @@ export const paymentsApi = {
   /** Gera um novo QR PIX para a mesma assinatura pendente (QR expirado). */
   regeneratePix: (subscriptionId: string, token: string) =>
     request<CheckoutResponse>(`/payments/pix/regenerate/${subscriptionId}`, { method: "POST" }, token),
+};
+
+export interface DietTemplate {
+  id: string;
+  title: string;
+  description?: string | null;
+  content: { meals?: any[] };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const dietTemplatesApi = {
+  list: (token: string) => request<DietTemplate[]>("/admin/diet-templates", {}, token),
+  create: (data: { title: string; description?: string; content: Record<string, any> }, token: string) =>
+    request<DietTemplate>("/admin/diet-templates", { method: "POST", body: JSON.stringify(data) }, token),
+  update: (id: string, data: Partial<{ title: string; description: string; content: Record<string, any> }>, token: string) =>
+    request<DietTemplate>(`/admin/diet-templates/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
+  remove: (id: string, token: string) => request<{ ok: boolean }>(`/admin/diet-templates/${id}`, { method: "DELETE" }, token),
+};
+
+export interface WorkoutTemplate {
+  id: string;
+  title: string;
+  letter: string;
+  description?: string | null;
+  content: { exercises?: any[] };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const workoutTemplatesApi = {
+  list: (token: string) => request<WorkoutTemplate[]>("/admin/workout-templates", {}, token),
+  create: (data: { title: string; letter?: string; description?: string; content: Record<string, any> }, token: string) =>
+    request<WorkoutTemplate>("/admin/workout-templates", { method: "POST", body: JSON.stringify(data) }, token),
+  update: (id: string, data: Partial<{ title: string; letter: string; description: string; content: Record<string, any> }>, token: string) =>
+    request<WorkoutTemplate>(`/admin/workout-templates/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
+  remove: (id: string, token: string) => request<{ ok: boolean }>(`/admin/workout-templates/${id}`, { method: "DELETE" }, token),
 };
 
 export interface ProfessionalProfile {

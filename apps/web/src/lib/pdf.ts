@@ -36,12 +36,19 @@ function esc(s: unknown): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+function siteLogoUrl(): string {
+  try {
+    return `${window.location.origin}/logo.webp`;
+  } catch {
+    return "/logo.webp";
+  }
+}
+
 function professionalHeaderHtml(pro: ProfessionalProfile): string {
   return `
-  <div style="display:flex;justify-content:space-between;gap:32px;margin-bottom:28px;">
+  <div style="display:flex;justify-content:space-between;gap:32px;margin-bottom:28px;align-items:center;">
     <div style="display:flex;align-items:center;gap:12px;">
-      <div style="width:44px;height:44px;border-radius:12px;background:${COUT.accent};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;color:${COUT.ink};">C</div>
-      <div style="font-weight:800;font-size:28px;letter-spacing:0.04em;color:${COUT.ink};">COUT</div>
+      <img src="${siteLogoUrl()}" alt="COUT" style="height:44px;width:auto;display:block;" onerror="this.style.display='none'" />
     </div>
     <div style="font-size:12px;color:#4b5563;line-height:1.7;text-align:left;">
       <div>👤 ${esc(pro.name)}</div>

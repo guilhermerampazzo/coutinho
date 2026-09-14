@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Button, Card, TextField, LineChart } from "@couthealth/ui";
-import { adminApi, foodsApi, exercisesApi, professionalProfileApi, ApiError, type FoodItem, type FoodCategory, type ExerciseItem, type MuscleGroup, type Assessment } from "../../lib/api";
+import { adminApi, foodsApi, exercisesApi, professionalProfileApi, dietTemplatesApi, workoutTemplatesApi, ApiError, type FoodItem, type FoodCategory, type ExerciseItem, type MuscleGroup, type Assessment, type DietTemplate, type WorkoutTemplate } from "../../lib/api";
 import { mealPlanPdfHtml, workoutPdfHtml, openPdfWindow } from "../../lib/pdf";
 import { useAuth } from "../../lib/auth";
 import { AdminLayout } from "./AdminLayout";
@@ -425,6 +425,12 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
   const [history, setHistory] = useState<any[]>([]);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  // Edição de plano já lançado: carrega o histórico no builder e salva in-place.
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  // Biblioteca de Dietas (modelos prontos reutilizáveis como ponto de partida).
+  const [templates, setTemplates] = useState<DietTemplate[]>([]);
+  const [templateTitle, setTemplateTitle] = useState("");
+  const [libraryStatus, setLibraryStatus] = useState<string | null>(null);
   // Substitutos (estilo Nutrium): alimento clicável abre o modal de "Substitutos".
   const [subModal, setSubModal] = useState<{ mealId: string; tmpId: string } | null>(null);
   const [subSearch, setSubSearch] = useState("");
@@ -435,11 +441,18 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
   useEffect(() => {
     foodsApi.categories().then(setCategories);
     refreshHistory();
+    refreshTemplates();
   }, []);
   async function refreshHistory() {
     if (!accessToken) return;
     try {
       setHistory(await adminApi.listMealPlans(clientId, accessToken));
+    } catch {}
+  }
+  async function refreshTemplates() {
+    if (!accessToken) return;
+    try {
+      setTemplates(await dietTemplatesApi.list(accessToken));
     } catch {}
   }
   useEffect(() => {
@@ -520,37 +533,173 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
     }));
   };
 
+  function buildMealsPayload() {
+    return {
+      title,
+      meals: meals.map((m) => ({
+        time: m.time,
+        name: m.name,
+        notes: m.notes,
+        items: m.items.map((it) => ({
+          foodId: it.foodId,
+          quantityGrams: gramsForDisplay(it.quantity, it.unit),
+          quantity: it.quantity,
+          unit: it.unit,
+          notes: it.notes,
+          substitutes: (it.substitutes ?? []).map((s) => ({ foodId: s.foodId, quantity: s.quantity, unit: s.unit })),
+        })),
+      })),
+    };
+  }
+
   async function publish() {
     if (!accessToken) return;
     if (meals.every((m) => m.items.length === 0)) {
       setStatus("Adicione ao menos um alimento em alguma refeição.");
       return;
     }
-    setStatus("Publicando…");
+    setStatus(editingPlanId ? "Salvando alterações…" : "Publicando…");
     try {
-      const payload = {
-        title,
-        meals: meals.map((m) => ({
-          time: m.time,
-          name: m.name,
-          notes: m.notes,
-          items: m.items.map((it) => ({
-            foodId: it.foodId,
-            quantityGrams: gramsForDisplay(it.quantity, it.unit),
-            quantity: it.quantity,
-            unit: it.unit,
-            notes: it.notes,
-            substitutes: (it.substitutes ?? []).map((s) => ({ foodId: s.foodId, quantity: s.quantity, unit: s.unit })),
-          })),
-        })),
-      };
-      const plan = await adminApi.createMealPlan(clientId, payload, accessToken);
-      await adminApi.publishMealPlan(plan.id, accessToken);
-      setStatus("Plano publicado! Cliente notificado.");
+      if (editingPlanId) {
+        await adminApi.updateMealPlan(editingPlanId, buildMealsPayload(), accessToken);
+        setStatus("Alterações salvas! Cliente notificado.");
+        setEditingPlanId(null);
+      } else {
+        const plan = await adminApi.createMealPlan(clientId, buildMealsPayload(), accessToken);
+        await adminApi.publishMealPlan(plan.id, accessToken);
+        setStatus("Plano publicado! Cliente notificado.");
+      }
       refreshHistory();
       onPublished();
     } catch (err) {
       setStatus(err instanceof ApiError ? err.message : "Erro ao publicar.");
+    }
+  }
+
+  /** Carrega um plano do histórico no builder para editar o conteúdo já lançado. */
+  function loadPlanForEdit(plan: any) {
+    setTitle(plan.title ?? `Plano alimentar — ${new Date().toLocaleDateString("pt-BR")}`);
+    const draftMeals: MealDraft[] = (plan.meals ?? []).map((m: any) => ({
+      id: `m-${m.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
+      time: m.time ?? "",
+      name: m.name ?? "",
+      notes: m.notes,
+      items: (m.items ?? []).map((it: any) => ({
+        tmpId: `it-${it.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
+        foodId: it.foodId ?? it.food?.id,
+        food: it.food,
+        quantity: it.quantity ?? it.quantityGrams ?? 100,
+        unit: it.unit ?? "Gramas",
+        notes: it.notes,
+        substitutes: (it.substitutes ?? []).map((s: any) => ({
+          tmpId: `sub-${s.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
+          foodId: s.foodId ?? s.food?.id,
+          food: s.food,
+          quantity: s.quantity ?? 100,
+          unit: s.unit ?? "Gramas",
+        })),
+      })),
+    }));
+    setMeals(draftMeals);
+    setEditingPlanId(plan.id);
+    if (draftMeals[0]) setActiveMeal(draftMeals[0].id);
+    setStatus(`Editando "${plan.title ?? "plano"}". Ajuste e salve as alterações.`);
+  }
+
+  function cancelEdit() {
+    setEditingPlanId(null);
+    setStatus(null);
+  }
+
+  /** Salva o conteúdo atual do builder como modelo na Biblioteca de Dietas. */
+  async function saveAsTemplate() {
+    if (!accessToken) return;
+    if (!templateTitle.trim()) {
+      setLibraryStatus("Dê um nome ao modelo (ex.: Dieta padrão 1800 kcal).");
+      return;
+    }
+    if (meals.every((m) => m.items.length === 0)) {
+      setLibraryStatus("Monte ao menos um item no builder antes de salvar como modelo.");
+      return;
+    }
+    setLibraryStatus("Salvando modelo…");
+    try {
+      await dietTemplatesApi.create(
+        {
+          title: templateTitle.trim(),
+          content: {
+            meals: meals.map((m) => ({
+              time: m.time,
+              name: m.name,
+              notes: m.notes,
+              items: m.items.map((it) => ({
+                foodId: it.foodId,
+                foodSnapshot: { id: it.food.id, name: it.food.name, kcal: it.food.kcal, protein: it.food.protein, carbs: it.food.carbs, fat: it.food.fat, categoryId: it.food.categoryId },
+                quantity: it.quantity,
+                unit: it.unit,
+                notes: it.notes,
+                substitutes: (it.substitutes ?? []).map((s) => ({
+                  foodId: s.foodId,
+                  foodSnapshot: { id: s.food.id, name: s.food.name, kcal: s.food.kcal, protein: s.food.protein, carbs: s.food.carbs, fat: s.food.fat, categoryId: s.food.categoryId },
+                  quantity: s.quantity,
+                  unit: s.unit,
+                })),
+              })),
+            })),
+          },
+        },
+        accessToken
+      );
+      setTemplateTitle("");
+      setLibraryStatus("Modelo salvo na biblioteca!");
+      refreshTemplates();
+    } catch (err) {
+      setLibraryStatus(err instanceof ApiError ? err.message : "Erro ao salvar modelo.");
+    }
+  }
+
+  /** Usa um modelo da biblioteca como ponto de partida (personalize antes de publicar). */
+  function applyTemplate(tpl: DietTemplate) {
+    const tplMeals = tpl.content?.meals ?? [];
+    if (tplMeals.length === 0) {
+      setLibraryStatus("Este modelo está vazio.");
+      return;
+    }
+    setMeals(
+      tplMeals.map((m: any) => ({
+        id: `m${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        time: m.time ?? "",
+        name: m.name ?? "",
+        notes: m.notes,
+        items: (m.items ?? []).map((it: any) => ({
+          tmpId: `it${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          foodId: it.foodId,
+          food: it.foodSnapshot ?? it.food,
+          quantity: it.quantity ?? 100,
+          unit: it.unit ?? "Gramas",
+          notes: it.notes,
+          substitutes: (it.substitutes ?? []).map((s: any) => ({
+            tmpId: `sub${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            foodId: s.foodId,
+            food: s.foodSnapshot ?? s.food,
+            quantity: s.quantity ?? 100,
+            unit: s.unit ?? "Gramas",
+          })),
+        })),
+      }))
+    );
+    setEditingPlanId(null);
+    setLibraryStatus(`Modelo "${tpl.title}" aplicado. Personalize e publique.`);
+  }
+
+  async function removeTemplate(id: string) {
+    if (!accessToken) return;
+    if (!window.confirm("Excluir este modelo da biblioteca?")) return;
+    try {
+      await dietTemplatesApi.remove(id, accessToken);
+      refreshTemplates();
+    } catch (err) {
+      setLibraryStatus(err instanceof ApiError ? err.message : "Erro ao excluir modelo.");
     }
   }
 
@@ -575,9 +724,17 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
       <Card style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
         <div style={{ display: "flex", gap: "var(--sp-3)", alignItems: "center", flexWrap: "wrap" }}>
           <TextField label="Título do plano" value={title} onChange={(e) => setTitle(e.target.value)} style={{ flex: 1, minWidth: 240 }} />
-          <Button onClick={publish} style={{ height: 44 }}>Publicar plano</Button>
+          <Button onClick={publish} style={{ height: 44 }}>{editingPlanId ? "Salvar alterações" : "Publicar plano"}</Button>
+          {editingPlanId && (
+            <Button variant="secondary" onClick={cancelEdit} style={{ height: 44 }}>Cancelar edição</Button>
+          )}
         </div>
-        {status && <p style={{ color: status.includes("publicado") ? "var(--success)" : "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{status}</p>}
+        {editingPlanId && (
+          <p style={{ color: "var(--accent)", fontSize: "var(--fs-body-sm)", margin: 0, fontWeight: 600 }}>
+            ✏️ Editando plano já lançado — ao salvar, o cliente recebe a versão atualizada.
+          </p>
+        )}
+        {status && <p style={{ color: status.includes("publicado") || status.includes("salvas") ? "var(--success)" : "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{status}</p>}
       </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "var(--sp-6)", alignItems: "start" }}>
@@ -604,23 +761,24 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
               <h5 style={{ margin: "0 0 8px" }}>Histórico ({history.length})</h5>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflow: "auto" }}>
                 {history.map((h) => (
-                  <div key={h.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--bg-base)", borderRadius: 8 }}>
+                  <div key={h.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--bg-base)", borderRadius: 8, flexWrap: "wrap" }}>
                     {editingTitleId === h.id ? (
-                      <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ flex: 1, background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", color: "var(--text-primary)", borderRadius: 6, padding: "4px 8px" }} />
+                      <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ flex: "1 1 100%", background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", color: "var(--text-primary)", borderRadius: 6, padding: "4px 8px" }} />
                     ) : (
-                      <span style={{ fontSize: "var(--fs-caption)", flex: 1 }}>{h.title ?? `Plano — ${new Date(h.createdAt).toLocaleDateString("pt-BR")}`}</span>
+                      <span style={{ fontSize: "var(--fs-caption)", flex: "1 1 100%" }}>{h.title ?? `Plano — ${new Date(h.createdAt).toLocaleDateString("pt-BR")}`}</span>
                     )}
                     <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>{new Date(h.createdAt).toLocaleDateString("pt-BR")}</span>
                     {editingTitleId === h.id ? (
-                      <>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                         <button onClick={async () => { if (!accessToken) return; await adminApi.renameMealPlan(h.id, editTitle, accessToken); setEditingTitleId(null); refreshHistory(); }} style={{ fontSize: 11, background: "var(--accent)", border: 0, borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Salvar</button>
                         <button onClick={() => setEditingTitleId(null)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Cancelar</button>
-                      </>
+                      </div>
                     ) : (
-                      <>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        <button onClick={() => loadPlanForEdit(h)} style={{ fontSize: 11, background: editingPlanId === h.id ? "var(--accent)" : "transparent", border: "1px solid var(--border-hairline)", color: editingPlanId === h.id ? "var(--ink-900)" : "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontWeight: 600 }}>Editar</button>
                         <button onClick={() => { setEditingTitleId(h.id); setEditTitle(h.title ?? ""); }} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Renomear</button>
                         <button onClick={() => openPdf(h)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>PDF</button>
-                      </>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -712,6 +870,38 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
             ))}
         </div>
       </div>
+
+      <Card style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+        <div>
+          <h4 style={{ margin: "0 0 4px" }}>📚 Biblioteca de Dietas</h4>
+          <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>
+            Dietas padrão já montadas para usar como ponto de partida — aplique num cliente e personalize antes de publicar.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <TextField label="Nome do modelo" value={templateTitle} onChange={(e) => setTemplateTitle(e.target.value)} placeholder="Ex.: Dieta padrão 1800 kcal" />
+          </div>
+          <Button variant="secondary" onClick={saveAsTemplate} style={{ height: 44 }}>Salvar atual como modelo</Button>
+        </div>
+        {libraryStatus && <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{libraryStatus}</p>}
+        {templates.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflow: "auto" }}>
+            {templates.map((t) => (
+              <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--bg-base)", borderRadius: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: "var(--fs-body-sm)", fontWeight: 600, flex: "1 1 140px" }}>{t.title}</span>
+                <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>{(t.content?.meals ?? []).length} refeições</span>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  <button onClick={() => applyTemplate(t)} style={{ fontSize: 11, background: "var(--accent)", border: 0, borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontWeight: 700 }}>Usar como base</button>
+                  <button onClick={() => removeTemplate(t.id)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Excluir</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>Nenhum modelo salvo ainda.</p>
+        )}
+      </Card>
       {subModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setSubModal(null)}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: 14, padding: 20, width: "100%", maxWidth: 560, maxHeight: "85vh", overflow: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -755,10 +945,11 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
 }
 
 // ---- TAB: PLANO DE TREINO ----
+type WorkoutExerciseDraft = { tmpId: string; exerciseId: string; exercise: ExerciseItem; sets: number; reps: string; load: string; restSeconds: string; notes: string };
 function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished: () => void }) {
   const { accessToken } = useAuth();
   const [letter, setLetter] = useState("A");
-  const [exercises, setExercises] = useState<{ tmpId: string; exerciseId: string; exercise: ExerciseItem; sets: number; reps: string; load: string; restSeconds: string; notes: string }[]>([]);
+  const [exercises, setExercises] = useState<WorkoutExerciseDraft[]>([]);
   const [search, setSearch] = useState("");
   const [muscleGroupId, setMuscleGroupId] = useState("");
   const [groups, setGroups] = useState<MuscleGroup[]>([]);
@@ -768,15 +959,28 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [activeLetterView, setActiveLetterView] = useState<string | null>(null);
+  // Edição de treino já lançado: carrega o histórico no builder e salva in-place.
+  const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null);
+  // Biblioteca de Treinos (modelos prontos reutilizáveis como ponto de partida).
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [templateTitle, setTemplateTitle] = useState("");
+  const [libraryStatus, setLibraryStatus] = useState<string | null>(null);
 
   useEffect(() => {
     exercisesApi.muscleGroups().then(setGroups);
     refreshHistory();
+    refreshTemplates();
   }, []);
   async function refreshHistory() {
     if (!accessToken) return;
     try {
       setHistory(await adminApi.listWorkouts(clientId, accessToken));
+    } catch {}
+  }
+  async function refreshTemplates() {
+    if (!accessToken) return;
+    try {
+      setTemplates(await workoutTemplatesApi.list(accessToken));
     } catch {}
   }
   useEffect(() => {
@@ -786,21 +990,130 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
 
   const letters = ["A", "B", "C", "D", "E"];
 
+  function buildExercisesPayload() {
+    return exercises.map((e, i) => ({ exerciseId: e.exerciseId, sets: e.sets, reps: e.reps, load: e.load, restSeconds: e.restSeconds ? Number(e.restSeconds) : undefined, notes: e.notes, order: i }));
+  }
+
   async function publish() {
     if (!accessToken || exercises.length === 0) {
       setStatus("Adicione ao menos um exercício.");
       return;
     }
-    setStatus("Publicando…");
+    setStatus(editingWorkoutId ? "Salvando alterações…" : "Publicando…");
     try {
-      const workout = await adminApi.createWorkout(clientId, { letter, exercises: exercises.map((e, i) => ({ exerciseId: e.exerciseId, sets: e.sets, reps: e.reps, load: e.load, restSeconds: e.restSeconds ? Number(e.restSeconds) : undefined, notes: e.notes, order: i })) }, accessToken);
-      await adminApi.publishWorkout(workout.id, accessToken);
-      setStatus(`Treino ${letter} publicado!`);
+      if (editingWorkoutId) {
+        await adminApi.updateWorkout(editingWorkoutId, { letter, exercises: buildExercisesPayload() }, accessToken);
+        setStatus(`Alterações do Treino ${letter} salvas! Cliente notificado.`);
+        setEditingWorkoutId(null);
+      } else {
+        const workout = await adminApi.createWorkout(clientId, { letter, exercises: buildExercisesPayload() }, accessToken);
+        await adminApi.publishWorkout(workout.id, accessToken);
+        setStatus(`Treino ${letter} publicado!`);
+      }
       setExercises([]);
       refreshHistory();
       onPublished();
     } catch (err) {
       setStatus(err instanceof ApiError ? err.message : "Erro ao publicar.");
+    }
+  }
+
+  /** Carrega um treino do histórico no builder para editar o conteúdo já lançado. */
+  function loadWorkoutForEdit(w: any) {
+    setLetter(w.letter ?? "A");
+    setExercises(
+      (w.exercises ?? []).map((ex: any) => ({
+        tmpId: `ex-${ex.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
+        exerciseId: ex.exerciseId ?? ex.exercise?.id,
+        exercise: ex.exercise,
+        sets: ex.sets ?? 3,
+        reps: ex.reps ?? "12",
+        load: ex.load ?? "",
+        restSeconds: ex.restSeconds != null ? String(ex.restSeconds) : "60",
+        notes: ex.notes ?? "",
+      }))
+    );
+    setEditingWorkoutId(w.id);
+    setStatus(`Editando "${w.title ?? `Treino ${w.letter}`} ". Ajuste e salve as alterações.`);
+  }
+
+  function cancelEdit() {
+    setEditingWorkoutId(null);
+    setExercises([]);
+    setStatus(null);
+  }
+
+  /** Salva o conteúdo atual do builder como modelo na Biblioteca de Treinos. */
+  async function saveAsTemplate() {
+    if (!accessToken) return;
+    if (!templateTitle.trim()) {
+      setLibraryStatus("Dê um nome ao modelo (ex.: Treino A padrão — hipertrofia).");
+      return;
+    }
+    if (exercises.length === 0) {
+      setLibraryStatus("Monte ao menos um exercício no builder antes de salvar como modelo.");
+      return;
+    }
+    setLibraryStatus("Salvando modelo…");
+    try {
+      await workoutTemplatesApi.create(
+        {
+          title: templateTitle.trim(),
+          letter,
+          content: {
+            exercises: exercises.map((e) => ({
+              exerciseId: e.exerciseId,
+              exerciseSnapshot: { id: e.exercise.id, name: e.exercise.name, muscleGroupId: e.exercise.muscleGroupId },
+              sets: e.sets,
+              reps: e.reps,
+              load: e.load,
+              restSeconds: e.restSeconds,
+              notes: e.notes,
+            })),
+          },
+        },
+        accessToken
+      );
+      setTemplateTitle("");
+      setLibraryStatus("Modelo salvo na biblioteca!");
+      refreshTemplates();
+    } catch (err) {
+      setLibraryStatus(err instanceof ApiError ? err.message : "Erro ao salvar modelo.");
+    }
+  }
+
+  /** Usa um modelo da biblioteca como ponto de partida (personalize antes de publicar). */
+  function applyTemplate(tpl: WorkoutTemplate) {
+    const tplExercises = tpl.content?.exercises ?? [];
+    if (tplExercises.length === 0) {
+      setLibraryStatus("Este modelo está vazio.");
+      return;
+    }
+    setLetter(tpl.letter ?? "A");
+    setExercises(
+      tplExercises.map((ex: any) => ({
+        tmpId: `ex${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        exerciseId: ex.exerciseId,
+        exercise: ex.exerciseSnapshot ?? ex.exercise,
+        sets: ex.sets ?? 3,
+        reps: ex.reps ?? "12",
+        load: ex.load ?? "",
+        restSeconds: ex.restSeconds != null ? String(ex.restSeconds) : "60",
+        notes: ex.notes ?? "",
+      }))
+    );
+    setEditingWorkoutId(null);
+    setLibraryStatus(`Modelo "${tpl.title}" aplicado. Personalize e publique.`);
+  }
+
+  async function removeTemplate(id: string) {
+    if (!accessToken) return;
+    if (!window.confirm("Excluir este modelo da biblioteca?")) return;
+    try {
+      await workoutTemplatesApi.remove(id, accessToken);
+      refreshTemplates();
+    } catch (err) {
+      setLibraryStatus(err instanceof ApiError ? err.message : "Erro ao excluir modelo.");
     }
   }
 
@@ -842,9 +1155,17 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
               ))}
             </div>
           </div>
-          <Button onClick={publish} style={{ height: 44 }}>Publicar Treino {letter}</Button>
-          {status && <span style={{ color: status.includes("publicado") ? "var(--success)" : "var(--danger)", fontSize: "var(--fs-body-sm)" }}>{status}</span>}
+          <Button onClick={publish} style={{ height: 44 }}>{editingWorkoutId ? `Salvar alterações (${letter})` : `Publicar Treino ${letter}`}</Button>
+          {editingWorkoutId && (
+            <Button variant="secondary" onClick={cancelEdit} style={{ height: 44 }}>Cancelar edição</Button>
+          )}
+          {status && <span style={{ color: status.includes("publicado") || status.includes("salvas") ? "var(--success)" : "var(--danger)", fontSize: "var(--fs-body-sm)" }}>{status}</span>}
         </div>
+        {editingWorkoutId && (
+          <p style={{ color: "var(--accent)", fontSize: "var(--fs-body-sm)", margin: 0, fontWeight: 600 }}>
+            ✏️ Editando treino já lançado — ao salvar, o cliente recebe a versão atualizada.
+          </p>
+        )}
       </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: "var(--sp-6)", alignItems: "start" }}>
@@ -865,12 +1186,13 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
                 )}
                 <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{w.exercises?.length ?? 0} exercícios • {new Date(w.createdAt).toLocaleDateString("pt-BR")}</span>
                 {editingId === w.id ? (
-                  <div style={{ display: "flex", gap: 4 }}>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                     <button onClick={async () => { if (!accessToken) return; await adminApi.renameWorkout(w.id, editTitle, accessToken); setEditingId(null); refreshHistory(); }} style={{ fontSize: 11, background: "var(--accent)", border: 0, borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Salvar</button>
                     <button onClick={() => setEditingId(null)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Cancelar</button>
                   </div>
                 ) : (
-                  <div style={{ display: "flex", gap: 4 }}>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    <button onClick={() => loadWorkoutForEdit(w)} style={{ fontSize: 11, background: editingWorkoutId === w.id ? "var(--accent)" : "transparent", border: "1px solid var(--border-hairline)", color: editingWorkoutId === w.id ? "var(--ink-900)" : "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontWeight: 600 }}>Editar</button>
                     <button onClick={() => { setEditingId(w.id); setEditTitle(w.title ?? ""); }} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Renomear</button>
                     <button onClick={() => openPdf(w)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>PDF</button>
                   </div>
@@ -929,6 +1251,38 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
           )}
         </Card>
       </div>
+
+      <Card style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+        <div>
+          <h4 style={{ margin: "0 0 4px" }}>📚 Biblioteca de Treinos</h4>
+          <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>
+            Treinos padrão já estruturados para usar como base — aplique num cliente e personalize antes de publicar.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <TextField label="Nome do modelo" value={templateTitle} onChange={(e) => setTemplateTitle(e.target.value)} placeholder="Ex.: Treino A padrão — hipertrofia" />
+          </div>
+          <Button variant="secondary" onClick={saveAsTemplate} style={{ height: 44 }}>Salvar atual como modelo</Button>
+        </div>
+        {libraryStatus && <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{libraryStatus}</p>}
+        {templates.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflow: "auto" }}>
+            {templates.map((t) => (
+              <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--bg-base)", borderRadius: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: "var(--fs-body-sm)", fontWeight: 600, flex: "1 1 140px" }}>{t.title} <span style={{ fontWeight: 400, color: "var(--text-tertiary)" }}>({t.letter})</span></span>
+                <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>{(t.content?.exercises ?? []).length} exercícios</span>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  <button onClick={() => applyTemplate(t)} style={{ fontSize: 11, background: "var(--accent)", border: 0, borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontWeight: 700 }}>Usar como base</button>
+                  <button onClick={() => removeTemplate(t.id)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Excluir</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>Nenhum modelo salvo ainda.</p>
+        )}
+      </Card>
     </div>
   );
 }

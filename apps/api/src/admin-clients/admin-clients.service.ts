@@ -8,6 +8,8 @@ import { AdminAiSummaryService, type AiSummaryResult } from "./ai-summary.servic
 import { CreateMealPlanDto } from "./dto/meal-plan.dto";
 import { CreateWorkoutDto } from "./dto/workout.dto";
 import { CreateClientDto } from "./dto/create-client.dto";
+import { CreateDietTemplateDto, UpdateDietTemplateDto } from "./dto/diet-template.dto";
+import { CreateWorkoutTemplateDto, UpdateWorkoutTemplateDto } from "./dto/workout-template.dto";
 
 @Injectable()
 export class AdminClientsService {
@@ -145,6 +147,186 @@ export class AdminClientsService {
 
   async renameWorkout(workoutId: string, title: string) {
     return this.prisma.workout.update({ where: { id: workoutId }, data: { title } });
+  }
+
+  /**
+   * Edição de um plano alimentar já lançado: substitui refeições/itens/substitutos
+   * pelo novo conteúdo, republica (publishedAt = agora) e notifica o cliente.
+   * O histórico é preservado — edita in-place em vez de criar uma nova versão.
+   */
+  async updateMealPlan(mealPlanId: string, dto: CreateMealPlanDto, professionalId: string) {
+    const existing = await this.prisma.mealPlan.findUnique({
+      where: { id: mealPlanId },
+      include: { meals: { include: { items: { select: { id: true } } } } },
+    });
+    if (!existing) throw new NotFoundException("Plano alimentar não encontrado.");
+
+    const mealIds = existing.meals.map((m) => m.id);
+    const itemIds = existing.meals.flatMap((m) => m.items.map((i) => i.id));
+
+    await this.prisma.$transaction(async (tx) => {
+      if (itemIds.length > 0) {
+        await tx.mealItemSubstitute.deleteMany({ where: { mealItemId: { in: itemIds } } });
+        await tx.mealItem.deleteMany({ where: { id: { in: itemIds } } });
+      }
+      if (mealIds.length > 0) {
+        await tx.meal.deleteMany({ where: { id: { in: mealIds } } });
+      }
+      if (dto.title !== undefined) {
+        await tx.mealPlan.update({ where: { id: mealPlanId }, data: { title: dto.title } });
+      }
+      for (const meal of dto.meals) {
+        await tx.meal.create({
+          data: {
+            mealPlanId,
+            time: meal.time,
+            name: meal.name,
+            notes: meal.notes,
+            items: {
+              create: meal.items.map((item) => ({
+                foodId: item.foodId,
+                quantityGrams: item.quantityGrams,
+                quantity: item.quantity ?? item.quantityGrams,
+                unit: item.unit ?? "g",
+                notes: item.notes,
+                substitutes: item.substitutes?.length
+                  ? {
+                      create: item.substitutes.map((s) => ({
+                        foodId: s.foodId,
+                        quantity: s.quantity,
+                        unit: s.unit,
+                        notes: s.notes,
+                      })),
+                    }
+                  : undefined,
+              })),
+            },
+          },
+        });
+      }
+      await tx.mealPlan.update({
+        where: { id: mealPlanId },
+        data: { publishedAt: new Date(), createdById: professionalId },
+      });
+    });
+
+    await this.prisma.notification.create({
+      data: {
+        userId: existing.clientId,
+        type: "PLANO_PUBLICADO",
+        title: "Seu plano alimentar foi atualizado",
+        body: "A equipe atualizou seu plano alimentar. Confira as novidades na área de Nutrição.",
+        sentAt: new Date(),
+      },
+    });
+    this.audit.log(professionalId, "UPDATE", "MealPlan", mealPlanId, { clientId: existing.clientId });
+    return this.prisma.mealPlan.findUnique({
+      where: { id: mealPlanId },
+      include: { meals: { include: { items: { include: { food: true, substitutes: { include: { food: true } } } } } } },
+    });
+  }
+
+  /**
+   * Edição de um treino já lançado: substitui os exercícios, republica e notifica.
+   * Edita in-place (preserva o histórico/letra) em vez de criar nova versão.
+   */
+  async updateWorkout(workoutId: string, dto: CreateWorkoutDto, professionalId: string) {
+    const existing = await this.prisma.workout.findUnique({ where: { id: workoutId } });
+    if (!existing) throw new NotFoundException("Treino não encontrado.");
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.workoutExercise.deleteMany({ where: { workoutId } });
+      await tx.workout.update({
+        where: { id: workoutId },
+        data: {
+          ...(dto.title !== undefined ? { title: dto.title } : {}),
+          ...(dto.letter ? { letter: dto.letter } : {}),
+          publishedAt: new Date(),
+          createdById: professionalId,
+          exercises: {
+            create: dto.exercises.map((ex, i) => ({
+              exerciseId: ex.exerciseId,
+              sets: ex.sets,
+              reps: ex.reps,
+              load: ex.load,
+              restSeconds: ex.restSeconds,
+              notes: ex.notes,
+              order: ex.order ?? i,
+            })),
+          },
+        },
+      });
+    });
+
+    await this.prisma.notification.create({
+      data: {
+        userId: existing.clientId,
+        type: "TREINO_ATUALIZADO",
+        title: `Treino ${dto.letter ?? existing.letter} atualizado`,
+        body: "A equipe atualizou seu treino. Confira na área de Treino.",
+        sentAt: new Date(),
+      },
+    });
+    this.audit.log(professionalId, "UPDATE", "Workout", workoutId, { clientId: existing.clientId });
+    return this.prisma.workout.findUnique({
+      where: { id: workoutId },
+      include: { exercises: { include: { exercise: true } } },
+    });
+  }
+
+  // ---------- Biblioteca de planos prontos (templates) ----------
+
+  listDietTemplates() {
+    return this.prisma.dietTemplate.findMany({ orderBy: { updatedAt: "desc" } });
+  }
+
+  createDietTemplate(dto: CreateDietTemplateDto, professionalId: string) {
+    return this.prisma.dietTemplate.create({
+      data: { title: dto.title, description: dto.description, content: dto.content as any, createdById: professionalId },
+    });
+  }
+
+  updateDietTemplate(id: string, dto: UpdateDietTemplateDto) {
+    return this.prisma.dietTemplate.update({
+      where: { id },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.description !== undefined ? { description: dto.description } : {}),
+        ...(dto.content !== undefined ? { content: dto.content as any } : {}),
+      },
+    });
+  }
+
+  async removeDietTemplate(id: string) {
+    await this.prisma.dietTemplate.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  listWorkoutTemplates() {
+    return this.prisma.workoutTemplate.findMany({ orderBy: { updatedAt: "desc" } });
+  }
+
+  createWorkoutTemplate(dto: CreateWorkoutTemplateDto, professionalId: string) {
+    return this.prisma.workoutTemplate.create({
+      data: { title: dto.title, letter: dto.letter ?? "A", description: dto.description, content: dto.content as any, createdById: professionalId },
+    });
+  }
+
+  updateWorkoutTemplate(id: string, dto: UpdateWorkoutTemplateDto) {
+    return this.prisma.workoutTemplate.update({
+      where: { id },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.letter !== undefined ? { letter: dto.letter } : {}),
+        ...(dto.description !== undefined ? { description: dto.description } : {}),
+        ...(dto.content !== undefined ? { content: dto.content as any } : {}),
+      },
+    });
+  }
+
+  async removeWorkoutTemplate(id: string) {
+    await this.prisma.workoutTemplate.delete({ where: { id } });
+    return { ok: true };
   }
 
   async createAssessmentForClient(clientId: string, dto: { weightKg?: number; heightCm?: number; waistCm?: number; abdomenCm?: number; armCm?: number; thighCm?: number; chestCm?: number; muscleMassKg?: number; fatMassKg?: number }, actorId: string) {

@@ -496,3 +496,30 @@ model AuditLog {
   metadata   Json?
   createdAt  DateTime @default(now())
 }
+
+// ---------- Biblioteca de planos prontos (templates reutilizáveis) ----------
+// Dietas/treinos padrão montados pelo profissional para usar como ponto de partida
+// na prescrição: aplica no builder do cliente e personaliza antes de publicar.
+// O conteúdo é o mesmo formato do DTO de criação (meals[] / exercises[] com
+// foodId/exerciseId + quantidades), guardado como Json + snapshot dos nomes para
+// exibir a lista sem precisar resolver cada alimento/exercício.
+model DietTemplate {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  content     Json
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkoutTemplate {
+  id          String   @id @default(cuid())
+  title       String
+  letter      String   @default("A")
+  description String?
+  content     Json
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
