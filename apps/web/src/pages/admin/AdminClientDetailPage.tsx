@@ -431,6 +431,7 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
   const [templates, setTemplates] = useState<DietTemplate[]>([]);
   const [templateTitle, setTemplateTitle] = useState("");
   const [libraryStatus, setLibraryStatus] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   // Substitutos (estilo Nutrium): alimento clicável abre o modal de "Substitutos".
   const [subModal, setSubModal] = useState<{ mealId: string; tmpId: string } | null>(null);
   const [subSearch, setSubSearch] = useState("");
@@ -611,6 +612,25 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
     setStatus(null);
   }
 
+  /** Remove um plano alimentar já lançado do histórico (com confirmação). */
+  async function removePlan(id: string) {
+    if (!accessToken) return;
+    if (!window.confirm("Remover este plano alimentar lançado? O cliente deixará de vê-lo.")) return;
+    try {
+      await adminApi.removeMealPlan(id, accessToken);
+      if (editingPlanId === id) {
+        setEditingPlanId(null);
+        setStatus(null);
+      } else {
+        setStatus("Plano removido.");
+      }
+      refreshHistory();
+      onPublished();
+    } catch (err) {
+      setStatus(err instanceof ApiError ? err.message : "Erro ao remover plano.");
+    }
+  }
+
   /** Salva o conteúdo atual do builder como modelo na Biblioteca de Dietas. */
   async function saveAsTemplate() {
     if (!accessToken) return;
@@ -722,11 +742,38 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-6)" }}>
       <Card style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
-        <div style={{ display: "flex", gap: "var(--sp-3)", alignItems: "center", flexWrap: "wrap" }}>
-          <TextField label="Título do plano" value={title} onChange={(e) => setTitle(e.target.value)} style={{ flex: 1, minWidth: 240 }} />
+        <div style={{ display: "flex", gap: "var(--sp-3)", alignItems: "end", flexWrap: "wrap" }}>
+          <TextField label="Título do plano" value={title} onChange={(e) => setTitle(e.target.value)} style={{ flex: 2, minWidth: 240 }} />
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <label style={{ display: "block", fontSize: "var(--fs-caption)", color: "var(--text-tertiary)", marginBottom: 6 }}>📚 Biblioteca de Dietas</label>
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setSelectedTemplateId(id);
+                const tpl = templates.find((t) => t.id === id);
+                if (tpl) applyTemplate(tpl);
+              }}
+              style={{ background: "var(--bg-base)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-md)", color: "var(--text-primary)", padding: "10px 12px", width: "100%", height: 44 }}
+            >
+              <option value="">Carregar modelo como base…</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.title} ({(t.content?.meals ?? []).length} refeições)</option>
+              ))}
+            </select>
+          </div>
           <Button onClick={publish} style={{ height: 44 }}>{editingPlanId ? "Salvar alterações" : "Publicar plano"}</Button>
           {editingPlanId && (
             <Button variant="secondary" onClick={cancelEdit} style={{ height: 44 }}>Cancelar edição</Button>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <TextField label="Salvar atual como modelo" value={templateTitle} onChange={(e) => setTemplateTitle(e.target.value)} placeholder="Ex.: Dieta padrão 1800 kcal" />
+          </div>
+          <Button variant="secondary" onClick={saveAsTemplate} style={{ height: 44 }}>Salvar modelo</Button>
+          {selectedTemplateId && (
+            <Button variant="secondary" onClick={() => removeTemplate(selectedTemplateId).then(() => setSelectedTemplateId(""))} style={{ height: 44, color: "var(--danger)", borderColor: "var(--danger)" }}>Excluir modelo</Button>
           )}
         </div>
         {editingPlanId && (
@@ -734,6 +781,7 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
             ✏️ Editando plano já lançado — ao salvar, o cliente recebe a versão atualizada.
           </p>
         )}
+        {libraryStatus && <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{libraryStatus}</p>}
         {status && <p style={{ color: status.includes("publicado") || status.includes("salvas") ? "var(--success)" : "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{status}</p>}
       </Card>
 
@@ -778,6 +826,7 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
                         <button onClick={() => loadPlanForEdit(h)} style={{ fontSize: 11, background: editingPlanId === h.id ? "var(--accent)" : "transparent", border: "1px solid var(--border-hairline)", color: editingPlanId === h.id ? "var(--ink-900)" : "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontWeight: 600 }}>Editar</button>
                         <button onClick={() => { setEditingTitleId(h.id); setEditTitle(h.title ?? ""); }} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Renomear</button>
                         <button onClick={() => openPdf(h)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>PDF</button>
+                        <button onClick={() => removePlan(h.id)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Excluir</button>
                       </div>
                     )}
                   </div>
@@ -871,37 +920,6 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
         </div>
       </div>
 
-      <Card style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
-        <div>
-          <h4 style={{ margin: "0 0 4px" }}>📚 Biblioteca de Dietas</h4>
-          <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>
-            Dietas padrão já montadas para usar como ponto de partida — aplique num cliente e personalize antes de publicar.
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <TextField label="Nome do modelo" value={templateTitle} onChange={(e) => setTemplateTitle(e.target.value)} placeholder="Ex.: Dieta padrão 1800 kcal" />
-          </div>
-          <Button variant="secondary" onClick={saveAsTemplate} style={{ height: 44 }}>Salvar atual como modelo</Button>
-        </div>
-        {libraryStatus && <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{libraryStatus}</p>}
-        {templates.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflow: "auto" }}>
-            {templates.map((t) => (
-              <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--bg-base)", borderRadius: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: "var(--fs-body-sm)", fontWeight: 600, flex: "1 1 140px" }}>{t.title}</span>
-                <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>{(t.content?.meals ?? []).length} refeições</span>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  <button onClick={() => applyTemplate(t)} style={{ fontSize: 11, background: "var(--accent)", border: 0, borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontWeight: 700 }}>Usar como base</button>
-                  <button onClick={() => removeTemplate(t.id)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Excluir</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>Nenhum modelo salvo ainda.</p>
-        )}
-      </Card>
       {subModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setSubModal(null)}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", borderRadius: 14, padding: 20, width: "100%", maxWidth: 560, maxHeight: "85vh", overflow: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -965,6 +983,7 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [templateTitle, setTemplateTitle] = useState("");
   const [libraryStatus, setLibraryStatus] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
 
   useEffect(() => {
     exercisesApi.muscleGroups().then(setGroups);
@@ -1041,6 +1060,26 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
     setEditingWorkoutId(null);
     setExercises([]);
     setStatus(null);
+  }
+
+  /** Remove um treino já lançado do histórico (com confirmação). */
+  async function removeLaunchedWorkout(id: string) {
+    if (!accessToken) return;
+    if (!window.confirm("Remover este treino lançado? O cliente deixará de vê-lo.")) return;
+    try {
+      await adminApi.removeWorkout(id, accessToken);
+      if (editingWorkoutId === id) {
+        setEditingWorkoutId(null);
+        setExercises([]);
+        setStatus(null);
+      } else {
+        setStatus("Treino removido.");
+      }
+      refreshHistory();
+      onPublished();
+    } catch (err) {
+      setStatus(err instanceof ApiError ? err.message : "Erro ao remover treino.");
+    }
   }
 
   /** Salva o conteúdo atual do builder como modelo na Biblioteca de Treinos. */
@@ -1155,12 +1194,40 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
               ))}
             </div>
           </div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <label style={{ display: "block", fontSize: "var(--fs-caption)", color: "var(--text-tertiary)", marginBottom: 6 }}>📚 Biblioteca de Treinos</label>
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setSelectedTemplateId(id);
+                const tpl = templates.find((t) => t.id === id);
+                if (tpl) applyTemplate(tpl);
+              }}
+              style={{ background: "var(--bg-base)", border: "1px solid var(--border-hairline)", borderRadius: "var(--r-md)", color: "var(--text-primary)", padding: "10px 12px", width: "100%", height: 44 }}
+            >
+              <option value="">Carregar modelo como base…</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.title} ({t.letter}) — {(t.content?.exercises ?? []).length} ex.</option>
+              ))}
+            </select>
+          </div>
           <Button onClick={publish} style={{ height: 44 }}>{editingWorkoutId ? `Salvar alterações (${letter})` : `Publicar Treino ${letter}`}</Button>
           {editingWorkoutId && (
             <Button variant="secondary" onClick={cancelEdit} style={{ height: 44 }}>Cancelar edição</Button>
           )}
           {status && <span style={{ color: status.includes("publicado") || status.includes("salvas") ? "var(--success)" : "var(--danger)", fontSize: "var(--fs-body-sm)" }}>{status}</span>}
         </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <TextField label="Salvar atual como modelo" value={templateTitle} onChange={(e) => setTemplateTitle(e.target.value)} placeholder="Ex.: Treino A padrão — hipertrofia" />
+          </div>
+          <Button variant="secondary" onClick={saveAsTemplate} style={{ height: 44 }}>Salvar modelo</Button>
+          {selectedTemplateId && (
+            <Button variant="secondary" onClick={() => removeTemplate(selectedTemplateId).then(() => setSelectedTemplateId(""))} style={{ height: 44, color: "var(--danger)", borderColor: "var(--danger)" }}>Excluir modelo</Button>
+          )}
+        </div>
+        {libraryStatus && <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{libraryStatus}</p>}
         {editingWorkoutId && (
           <p style={{ color: "var(--accent)", fontSize: "var(--fs-body-sm)", margin: 0, fontWeight: 600 }}>
             ✏️ Editando treino já lançado — ao salvar, o cliente recebe a versão atualizada.
@@ -1195,6 +1262,7 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
                     <button onClick={() => loadWorkoutForEdit(w)} style={{ fontSize: 11, background: editingWorkoutId === w.id ? "var(--accent)" : "transparent", border: "1px solid var(--border-hairline)", color: editingWorkoutId === w.id ? "var(--ink-900)" : "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontWeight: 600 }}>Editar</button>
                     <button onClick={() => { setEditingId(w.id); setEditTitle(w.title ?? ""); }} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Renomear</button>
                     <button onClick={() => openPdf(w)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>PDF</button>
+                    <button onClick={() => removeLaunchedWorkout(w.id)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Excluir</button>
                   </div>
                 )}
               </div>
@@ -1251,38 +1319,6 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
           )}
         </Card>
       </div>
-
-      <Card style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
-        <div>
-          <h4 style={{ margin: "0 0 4px" }}>📚 Biblioteca de Treinos</h4>
-          <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>
-            Treinos padrão já estruturados para usar como base — aplique num cliente e personalize antes de publicar.
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <TextField label="Nome do modelo" value={templateTitle} onChange={(e) => setTemplateTitle(e.target.value)} placeholder="Ex.: Treino A padrão — hipertrofia" />
-          </div>
-          <Button variant="secondary" onClick={saveAsTemplate} style={{ height: 44 }}>Salvar atual como modelo</Button>
-        </div>
-        {libraryStatus && <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{libraryStatus}</p>}
-        {templates.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflow: "auto" }}>
-            {templates.map((t) => (
-              <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--bg-base)", borderRadius: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: "var(--fs-body-sm)", fontWeight: 600, flex: "1 1 140px" }}>{t.title} <span style={{ fontWeight: 400, color: "var(--text-tertiary)" }}>({t.letter})</span></span>
-                <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>{(t.content?.exercises ?? []).length} exercícios</span>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  <button onClick={() => applyTemplate(t)} style={{ fontSize: 11, background: "var(--accent)", border: 0, borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontWeight: 700 }}>Usar como base</button>
-                  <button onClick={() => removeTemplate(t.id)} style={{ fontSize: 11, background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>Excluir</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ color: "var(--text-tertiary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>Nenhum modelo salvo ainda.</p>
-        )}
-      </Card>
     </div>
   );
 }

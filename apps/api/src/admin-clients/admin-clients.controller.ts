@@ -89,6 +89,12 @@ export class AdminClientsController {
     return this.service.updateMealPlan(id, dto, req.user.userId);
   }
 
+  /** Remove um plano alimentar já lançado do histórico do cliente. */
+  @Delete("meal-plans/:id")
+  removeMealPlan(@Param("id") id: string, @Req() req: any) {
+    return this.service.removeMealPlan(id, req.user.userId);
+  }
+
   @Get("clients/:id/workouts")
   listWorkouts(@Param("id") id: string) {
     return this.service.listWorkouts(id);
@@ -103,6 +109,12 @@ export class AdminClientsController {
   @Patch("workouts/:id")
   updateWorkout(@Param("id") id: string, @Body() dto: CreateWorkoutDto, @Req() req: any) {
     return this.service.updateWorkout(id, dto, req.user.userId);
+  }
+
+  /** Remove um treino já lançado do histórico do cliente. */
+  @Delete("workouts/:id")
+  removeWorkout(@Param("id") id: string, @Req() req: any) {
+    return this.service.removeWorkout(id, req.user.userId);
   }
 
   // ---- Biblioteca de planos prontos (templates reutilizáveis) ----

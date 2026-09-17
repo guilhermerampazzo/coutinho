@@ -149,6 +149,48 @@ export class AdminClientsService {
     return this.prisma.workout.update({ where: { id: workoutId }, data: { title } });
   }
 
+  /** Remove um plano alimentar já lançado (refeições/itens/substitutos) do histórico do cliente. */
+  async removeMealPlan(mealPlanId: string, professionalId: string) {
+    const existing = await this.prisma.mealPlan.findUnique({
+      where: { id: mealPlanId },
+      include: { meals: { include: { items: { select: { id: true } } } } },
+    });
+    if (!existing) throw new NotFoundException("Plano alimentar não encontrado.");
+    const mealIds = existing.meals.map((m) => m.id);
+    const itemIds = existing.meals.flatMap((m) => m.items.map((i) => i.id));
+    await this.prisma.$transaction(async (tx) => {
+      if (itemIds.length > 0) {
+        await tx.mealItemSubstitute.deleteMany({ where: { mealItemId: { in: itemIds } } });
+        await tx.mealItem.deleteMany({ where: { id: { in: itemIds } } });
+      }
+      if (mealIds.length > 0) {
+        await tx.meal.deleteMany({ where: { id: { in: mealIds } } });
+      }
+      await tx.mealPlan.delete({ where: { id: mealPlanId } });
+    });
+    this.audit.log(professionalId, "DELETE", "MealPlan", mealPlanId, { clientId: existing.clientId });
+    return { ok: true };
+  }
+
+  /** Remove um treino já lançado (exercícios/logs) do histórico do cliente. */
+  async removeWorkout(workoutId: string, professionalId: string) {
+    const existing = await this.prisma.workout.findUnique({
+      where: { id: workoutId },
+      include: { exercises: { select: { id: true } } },
+    });
+    if (!existing) throw new NotFoundException("Treino não encontrado.");
+    const exerciseIds = existing.exercises.map((e) => e.id);
+    await this.prisma.$transaction(async (tx) => {
+      if (exerciseIds.length > 0) {
+        await tx.exerciseLog.deleteMany({ where: { workoutExerciseId: { in: exerciseIds } } });
+        await tx.workoutExercise.deleteMany({ where: { id: { in: exerciseIds } } });
+      }
+      await tx.workout.delete({ where: { id: workoutId } });
+    });
+    this.audit.log(professionalId, "DELETE", "Workout", workoutId, { clientId: existing.clientId });
+    return { ok: true };
+  }
+
   /**
    * Edição de um plano alimentar já lançado: substitui refeições/itens/substitutos
    * pelo novo conteúdo, republica (publishedAt = agora) e notifica o cliente.
