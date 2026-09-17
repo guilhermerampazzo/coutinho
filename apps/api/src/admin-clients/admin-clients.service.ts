@@ -192,60 +192,69 @@ export class AdminClientsService {
   }
 
   /**
+   * Substitui o conteúdo (refeições/itens/substitutos) de um plano alimentar.
+   * Usado tanto pela edição de plano lançado quanto pelo autosave do rascunho.
+   */
+  private async replaceMealPlanContent(tx: any, mealPlanId: string, dto: CreateMealPlanDto) {
+    const existing = await tx.mealPlan.findUnique({
+      where: { id: mealPlanId },
+      include: { meals: { include: { items: { select: { id: true } } } } },
+    });
+    const mealIds = (existing?.meals ?? []).map((m: any) => m.id);
+    const itemIds = (existing?.meals ?? []).flatMap((m: any) => m.items.map((i: any) => i.id));
+
+    if (itemIds.length > 0) {
+      await tx.mealItemSubstitute.deleteMany({ where: { mealItemId: { in: itemIds } } });
+      await tx.mealItem.deleteMany({ where: { id: { in: itemIds } } });
+    }
+    if (mealIds.length > 0) {
+      await tx.meal.deleteMany({ where: { id: { in: mealIds } } });
+    }
+    if (dto.title !== undefined) {
+      await tx.mealPlan.update({ where: { id: mealPlanId }, data: { title: dto.title } });
+    }
+    for (const meal of dto.meals) {
+      await tx.meal.create({
+        data: {
+          mealPlanId,
+          time: meal.time,
+          name: meal.name,
+          notes: meal.notes,
+          items: {
+            create: meal.items.map((item) => ({
+              foodId: item.foodId,
+              quantityGrams: item.quantityGrams,
+              quantity: item.quantity ?? item.quantityGrams,
+              unit: item.unit ?? "g",
+              notes: item.notes,
+              substitutes: item.substitutes?.length
+                ? {
+                    create: item.substitutes.map((s) => ({
+                      foodId: s.foodId,
+                      quantity: s.quantity,
+                      unit: s.unit,
+                      notes: s.notes,
+                    })),
+                  }
+                : undefined,
+            })),
+          },
+        },
+      });
+    }
+  }
+
+  /**
    * Edição de um plano alimentar já lançado: substitui refeições/itens/substitutos
    * pelo novo conteúdo, republica (publishedAt = agora) e notifica o cliente.
    * O histórico é preservado — edita in-place em vez de criar uma nova versão.
    */
   async updateMealPlan(mealPlanId: string, dto: CreateMealPlanDto, professionalId: string) {
-    const existing = await this.prisma.mealPlan.findUnique({
-      where: { id: mealPlanId },
-      include: { meals: { include: { items: { select: { id: true } } } } },
-    });
+    const existing = await this.prisma.mealPlan.findUnique({ where: { id: mealPlanId } });
     if (!existing) throw new NotFoundException("Plano alimentar não encontrado.");
 
-    const mealIds = existing.meals.map((m) => m.id);
-    const itemIds = existing.meals.flatMap((m) => m.items.map((i) => i.id));
-
     await this.prisma.$transaction(async (tx) => {
-      if (itemIds.length > 0) {
-        await tx.mealItemSubstitute.deleteMany({ where: { mealItemId: { in: itemIds } } });
-        await tx.mealItem.deleteMany({ where: { id: { in: itemIds } } });
-      }
-      if (mealIds.length > 0) {
-        await tx.meal.deleteMany({ where: { id: { in: mealIds } } });
-      }
-      if (dto.title !== undefined) {
-        await tx.mealPlan.update({ where: { id: mealPlanId }, data: { title: dto.title } });
-      }
-      for (const meal of dto.meals) {
-        await tx.meal.create({
-          data: {
-            mealPlanId,
-            time: meal.time,
-            name: meal.name,
-            notes: meal.notes,
-            items: {
-              create: meal.items.map((item) => ({
-                foodId: item.foodId,
-                quantityGrams: item.quantityGrams,
-                quantity: item.quantity ?? item.quantityGrams,
-                unit: item.unit ?? "g",
-                notes: item.notes,
-                substitutes: item.substitutes?.length
-                  ? {
-                      create: item.substitutes.map((s) => ({
-                        foodId: s.foodId,
-                        quantity: s.quantity,
-                        unit: s.unit,
-                        notes: s.notes,
-                      })),
-                    }
-                  : undefined,
-              })),
-            },
-          },
-        });
-      }
+      await this.replaceMealPlanContent(tx, mealPlanId, dto);
       await tx.mealPlan.update({
         where: { id: mealPlanId },
         data: { publishedAt: new Date(), createdById: professionalId },
@@ -269,6 +278,32 @@ export class AdminClientsService {
   }
 
   /**
+   * Substitui os exercícios de um treino. Usado pela edição de treino lançado
+   * e pelo autosave do rascunho.
+   */
+  private async replaceWorkoutContent(tx: any, workoutId: string, dto: CreateWorkoutDto) {
+    await tx.workoutExercise.deleteMany({ where: { workoutId } });
+    await tx.workout.update({
+      where: { id: workoutId },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.letter ? { letter: dto.letter } : {}),
+        exercises: {
+          create: dto.exercises.map((ex, i) => ({
+            exerciseId: ex.exerciseId,
+            sets: ex.sets,
+            reps: ex.reps,
+            load: ex.load,
+            restSeconds: ex.restSeconds,
+            notes: ex.notes,
+            order: ex.order ?? i,
+          })),
+        },
+      },
+    });
+  }
+
+  /**
    * Edição de um treino já lançado: substitui os exercícios, republica e notifica.
    * Edita in-place (preserva o histórico/letra) em vez de criar nova versão.
    */
@@ -277,26 +312,10 @@ export class AdminClientsService {
     if (!existing) throw new NotFoundException("Treino não encontrado.");
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.workoutExercise.deleteMany({ where: { workoutId } });
+      await this.replaceWorkoutContent(tx, workoutId, dto);
       await tx.workout.update({
         where: { id: workoutId },
-        data: {
-          ...(dto.title !== undefined ? { title: dto.title } : {}),
-          ...(dto.letter ? { letter: dto.letter } : {}),
-          publishedAt: new Date(),
-          createdById: professionalId,
-          exercises: {
-            create: dto.exercises.map((ex, i) => ({
-              exerciseId: ex.exerciseId,
-              sets: ex.sets,
-              reps: ex.reps,
-              load: ex.load,
-              restSeconds: ex.restSeconds,
-              notes: ex.notes,
-              order: ex.order ?? i,
-            })),
-          },
-        },
+        data: { publishedAt: new Date(), createdById: professionalId },
       });
     });
 
@@ -314,6 +333,78 @@ export class AdminClientsService {
       where: { id: workoutId },
       include: { exercises: { include: { exercise: true } } },
     });
+  }
+
+  // ---------- Rascunhos com salvamento automático (prescrição) ----------
+  // O rascunho é um plano/treino NÃO publicado (publishedAt = null): invisível
+  // para o cliente, que só enxerga publishedAt != null. A publicação continua
+  // manual, pelos endpoints de publish já existentes.
+
+  private mealPlanFullInclude() {
+    return { meals: { include: { items: { include: { food: true, substitutes: { include: { food: true } } } } } } };
+  }
+
+  private workoutFullInclude() {
+    return { exercises: { include: { exercise: true } } };
+  }
+
+  /** Último plano alimentar NÃO publicado do cliente (rascunho do autosave). */
+  async getMealPlanDraft(clientId: string) {
+    await this.assertClient(clientId);
+    return this.prisma.mealPlan.findFirst({
+      where: { clientId, publishedAt: null },
+      orderBy: { createdAt: "desc" },
+      include: this.mealPlanFullInclude(),
+    });
+  }
+
+  /**
+   * Autosave do rascunho alimentar: cria ou atualiza o plano não publicado —
+   * sem publicar e sem notificar o cliente. Remove rascunhos órfãos antigos.
+   */
+  async saveMealPlanDraft(clientId: string, dto: CreateMealPlanDto) {
+    await this.assertClient(clientId);
+    const existing = await this.prisma.mealPlan.findFirst({
+      where: { clientId, publishedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (!existing) return this.createMealPlan(clientId, dto);
+    await this.prisma.$transaction(async (tx) => {
+      await this.replaceMealPlanContent(tx, existing.id, dto);
+      await tx.mealPlan.deleteMany({ where: { clientId, publishedAt: null, id: { not: existing.id } } });
+    });
+    return this.prisma.mealPlan.findUnique({ where: { id: existing.id }, include: this.mealPlanFullInclude() });
+  }
+
+  /** Último treino NÃO publicado do cliente para a letra (rascunho do autosave). */
+  async getWorkoutDraft(clientId: string, letter: string) {
+    await this.assertClient(clientId);
+    return this.prisma.workout.findFirst({
+      where: { clientId, letter, publishedAt: null },
+      orderBy: { createdAt: "desc" },
+      include: this.workoutFullInclude(),
+    });
+  }
+
+  /**
+   * Autosave do rascunho de treino: cria ou atualiza o treino não publicado —
+   * sem publicar e sem notificar o cliente. Remove rascunhos órfãos antigos.
+   */
+  async saveWorkoutDraft(clientId: string, dto: CreateWorkoutDto) {
+    await this.assertClient(clientId);
+    const letter = dto.letter ?? "A";
+    const existing = await this.prisma.workout.findFirst({
+      where: { clientId, letter, publishedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (!existing) return this.createWorkout(clientId, dto);
+    await this.prisma.$transaction(async (tx) => {
+      await this.replaceWorkoutContent(tx, existing.id, dto);
+      await tx.workout.deleteMany({ where: { clientId, letter, publishedAt: null, id: { not: existing.id } } });
+    });
+    return this.prisma.workout.findUnique({ where: { id: existing.id }, include: this.workoutFullInclude() });
   }
 
   // ---------- Biblioteca de planos prontos (templates) ----------

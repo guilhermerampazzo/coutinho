@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Button, Card, TextField, LineChart } from "@couthealth/ui";
 import { adminApi, foodsApi, exercisesApi, professionalProfileApi, dietTemplatesApi, workoutTemplatesApi, ApiError, type FoodItem, type FoodCategory, type ExerciseItem, type MuscleGroup, type Assessment, type DietTemplate, type WorkoutTemplate } from "../../lib/api";
@@ -406,16 +406,43 @@ function CompositionTab({ clientId, assessments: initial, onRefresh }: { clientI
 type SubstituteDraft = { tmpId: string; foodId: string; food: FoodItem; quantity: number; unit: string };
 type MealItemDraft = { tmpId: string; foodId: string; food: FoodItem; quantity: number; unit: string; notes?: string; substitutes: SubstituteDraft[] };
 type MealDraft = { id: string; time: string; name: string; notes?: string; items: MealItemDraft[] };
-function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished: () => void }) {
-  const { accessToken } = useAuth();
-  const [title, setTitle] = useState(`Plano alimentar — ${new Date().toLocaleDateString("pt-BR")}`);
-  const [meals, setMeals] = useState<MealDraft[]>([
+function defaultMeals(): MealDraft[] {
+  return [
     { id: "m1", time: "07:00", name: "Café da manhã", items: [] },
     { id: "m2", time: "10:00", name: "Lanche da manhã", items: [] },
     { id: "m3", time: "12:00", name: "Almoço", items: [] },
     { id: "m4", time: "16:00", name: "Lanche da tarde", items: [] },
     { id: "m5", time: "19:00", name: "Jantar", items: [] },
-  ]);
+  ];
+}
+/** Converte refeições vindas da API (plano, rascunho ou backup local) em drafts do builder. */
+function toMealDrafts(src: any[]): MealDraft[] {
+  return (src ?? []).map((m: any) => ({
+    id: `m-${m.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
+    time: m.time ?? "",
+    name: m.name ?? "",
+    notes: m.notes,
+    items: (m.items ?? []).map((it: any) => ({
+      tmpId: `it-${it.tmpId ?? it.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
+      foodId: it.foodId ?? it.food?.id,
+      food: it.food,
+      quantity: it.quantity ?? it.quantityGrams ?? 100,
+      unit: it.unit ?? "Gramas",
+      notes: it.notes,
+      substitutes: (it.substitutes ?? []).map((s: any) => ({
+        tmpId: `sub-${s.tmpId ?? s.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
+        foodId: s.foodId ?? s.food?.id,
+        food: s.food,
+        quantity: s.quantity ?? 100,
+        unit: s.unit ?? "Gramas",
+      })),
+    })),
+  }));
+}
+function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished: () => void }) {
+  const { accessToken } = useAuth();
+  const [title, setTitle] = useState(`Plano alimentar — ${new Date().toLocaleDateString("pt-BR")}`);
+  const [meals, setMeals] = useState<MealDraft[]>(defaultMeals());
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState<FoodCategory[]>([]);
@@ -438,12 +465,103 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
   const [subResults, setSubResults] = useState<FoodItem[]>([]);
   const [subQty, setSubQty] = useState("100");
   const [subUnit, setSubUnit] = useState<string>("Gramas");
+  // Salvamento automático: rascunho no servidor (invisível p/ cliente) + cópia local.
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [autosave, setAutosave] = useState<{ saving: boolean; savedAt: number | null; error: string | null }>({ saving: false, savedAt: null, error: null });
+  const lastSavedJson = useRef("");
+  const readyRef = useRef(false);
+  const mealBackupKey = `couthealth:meal-draft:${clientId}`;
+  // Observação por alimento (campo expansível) e copiar/colar refeição.
+  const [obsOpen, setObsOpen] = useState<Record<string, boolean>>({});
+  const [copiedMeal, setCopiedMeal] = useState<{ name: string; items: MealItemDraft[] } | null>(null);
 
   useEffect(() => {
     foodsApi.categories().then(setCategories);
-    refreshHistory();
     refreshTemplates();
+    (async () => {
+      if (!accessToken) return;
+      let hist: any[] = [];
+      try {
+        hist = await adminApi.listMealPlans(clientId, accessToken);
+        setHistory(hist);
+      } catch {}
+      let draft: any = null;
+      try {
+        draft = await adminApi.mealPlanDraft(clientId, accessToken);
+        if (draft) {
+          setDraftId(draft.id);
+          lastSavedJson.current = JSON.stringify({ title: draft.title, meals: draft.meals });
+        }
+      } catch {}
+      let backup: any = null;
+      try {
+        backup = JSON.parse(localStorage.getItem(mealBackupKey) ?? "null");
+      } catch {}
+      // Restaura edição de plano lançado interrompida (rascunho local).
+      if (backup?.kind === "edit" && backup.planId) {
+        const plan = hist.find((h) => h.id === backup.planId);
+        if (plan && (backup.meals ?? []).length > 0) {
+          setTitle(backup.title ?? plan.title ?? "");
+          setMeals(toMealDrafts(backup.meals));
+          if (backup.meals[0]) setActiveMeal(backup.meals[0].id);
+          setEditingPlanId(plan.id);
+          setStatus("Edição anterior restaurada do salvamento automático — revise e salve.");
+          readyRef.current = true;
+          return;
+        }
+      }
+      // Restaura rascunho local mais novo que o do servidor.
+      if (backup?.kind === "new" && (backup.meals ?? []).some((m: any) => (m.items ?? []).length > 0)) {
+        const draftTime = draft ? new Date(draft.createdAt).getTime() : 0;
+        if ((backup.savedAt ?? 0) > draftTime) {
+          setTitle(backup.title ?? `Plano alimentar — ${new Date().toLocaleDateString("pt-BR")}`);
+          setMeals(toMealDrafts(backup.meals));
+          if (backup.meals[0]) setActiveMeal(backup.meals[0].id);
+          setStatus("Rascunho anterior restaurado do salvamento automático.");
+          readyRef.current = true;
+          return;
+        }
+      }
+      if (draft) {
+        setTitle(draft.title ?? `Plano alimentar — ${new Date().toLocaleDateString("pt-BR")}`);
+        const dm = toMealDrafts(draft.meals ?? []);
+        if (dm.length > 0) {
+          setMeals(dm);
+          setActiveMeal(dm[0].id);
+          setStatus("Rascunho em andamento restaurado — continue de onde parou.");
+        }
+      }
+      readyRef.current = true;
+    })();
   }, []);
+  // Espelho local imediato a cada alteração (protege contra erro/quedas).
+  useEffect(() => {
+    if (!readyRef.current) return;
+    try {
+      localStorage.setItem(mealBackupKey, JSON.stringify({ kind: editingPlanId ? "edit" : "new", planId: editingPlanId, title, meals, savedAt: Date.now() }));
+    } catch {}
+  }, [title, meals, editingPlanId]);
+  // Autosave no servidor (debounce 1,5s) — só para nova prescrição; edição de
+  // plano lançado usa o rascunho local até o salvamento manual.
+  useEffect(() => {
+    if (!readyRef.current || editingPlanId || !accessToken) return;
+    const payload = buildMealsPayload();
+    if (payload.meals.every((m: any) => m.items.length === 0)) return;
+    const snapshot = JSON.stringify(payload);
+    if (snapshot === lastSavedJson.current) return;
+    setAutosave((a) => ({ ...a, saving: true, error: null }));
+    const t = setTimeout(async () => {
+      try {
+        const saved = await adminApi.saveMealPlanDraft(clientId, payload, accessToken);
+        setDraftId(saved.id);
+        lastSavedJson.current = snapshot;
+        setAutosave({ saving: false, savedAt: Date.now(), error: null });
+      } catch {
+        setAutosave({ saving: false, savedAt: null, error: "Falha no salvamento automático — seu rascunho local está guardado neste navegador." });
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [title, meals, editingPlanId]);
   async function refreshHistory() {
     if (!accessToken) return;
     try {
@@ -488,6 +606,28 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
     setMeals((prev) => prev.map((m) => (m.id === activeMeal ? { ...m, items: [...m.items, { tmpId: `${Date.now()}`, foodId: food.id, food, quantity: 100, unit: "Gramas", substitutes: [] }] } : m)));
     setSearch("");
     setResults([]);
+  };
+
+  /** Copia os itens de uma refeição para colar em outra (ex.: almoço → janta). */
+  const copyMeal = (mealId: string) => {
+    const meal = meals.find((m) => m.id === mealId);
+    if (!meal || meal.items.length === 0) {
+      setStatus("Esta refeição não tem itens para copiar.");
+      return;
+    }
+    setCopiedMeal({ name: meal.name, items: meal.items });
+    setStatus(`Itens de "${meal.name}" copiados — abra a refeição destino e clique em Colar.`);
+  };
+  const pasteMeal = (targetId: string) => {
+    if (!copiedMeal) return;
+    const stamp = Date.now();
+    const clones: MealItemDraft[] = copiedMeal.items.map((it, i) => ({
+      ...it,
+      tmpId: `it-${stamp}-${i}-${Math.random().toString(36).slice(2)}`,
+      substitutes: (it.substitutes ?? []).map((s, j) => ({ ...s, tmpId: `sub-${stamp}-${i}-${j}-${Math.random().toString(36).slice(2)}` })),
+    }));
+    setMeals((prev) => prev.map((m) => (m.id === targetId ? { ...m, items: [...m.items, ...clones] } : m)));
+    setStatus(`${clones.length} itens colados de "${copiedMeal.name}".`);
   };
 
   function addSubstitute(food: FoodItem) {
@@ -553,23 +693,58 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
     };
   }
 
+  /** Garante que o rascunho do servidor está atualizado (usado antes de publicar). */
+  async function persistMealDraftNow(): Promise<string | null> {
+    if (!accessToken || editingPlanId) return null;
+    const payload = buildMealsPayload();
+    if (payload.meals.every((m: any) => m.items.length === 0)) return draftId;
+    const snapshot = JSON.stringify(payload);
+    if (snapshot === lastSavedJson.current && draftId) return draftId;
+    setAutosave((a) => ({ ...a, saving: true, error: null }));
+    const saved = await adminApi.saveMealPlanDraft(clientId, payload, accessToken);
+    setDraftId(saved.id);
+    lastSavedJson.current = snapshot;
+    setAutosave({ saving: false, savedAt: Date.now(), error: null });
+    return saved.id;
+  }
+
+  function resetMealBuilder() {
+    setTitle(`Plano alimentar — ${new Date().toLocaleDateString("pt-BR")}`);
+    const dm = defaultMeals();
+    setMeals(dm);
+    setActiveMeal(dm[0].id);
+    setDraftId(null);
+    setCopiedMeal(null);
+    lastSavedJson.current = "";
+  }
+
   async function publish() {
     if (!accessToken) return;
     if (meals.every((m) => m.items.length === 0)) {
       setStatus("Adicione ao menos um alimento em alguma refeição.");
       return;
     }
-    setStatus(editingPlanId ? "Salvando alterações…" : "Publicando…");
     try {
       if (editingPlanId) {
+        setStatus("Salvando alterações…");
         await adminApi.updateMealPlan(editingPlanId, buildMealsPayload(), accessToken);
         setStatus("Alterações salvas! Cliente notificado.");
         setEditingPlanId(null);
       } else {
-        const plan = await adminApi.createMealPlan(clientId, buildMealsPayload(), accessToken);
-        await adminApi.publishMealPlan(plan.id, accessToken);
+        // Publicação manual: garante o autosave e publica o rascunho.
+        setStatus("Salvando e publicando…");
+        let planId: string = (await persistMealDraftNow()) ?? "";
+        if (!planId) {
+          const plan = await adminApi.createMealPlan(clientId, buildMealsPayload(), accessToken);
+          planId = plan.id;
+        }
+        await adminApi.publishMealPlan(planId, accessToken);
         setStatus("Plano publicado! Cliente notificado.");
+        resetMealBuilder();
       }
+      try {
+        localStorage.removeItem(mealBackupKey);
+      } catch {}
       refreshHistory();
       onPublished();
     } catch (err) {
@@ -580,27 +755,7 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
   /** Carrega um plano do histórico no builder para editar o conteúdo já lançado. */
   function loadPlanForEdit(plan: any) {
     setTitle(plan.title ?? `Plano alimentar — ${new Date().toLocaleDateString("pt-BR")}`);
-    const draftMeals: MealDraft[] = (plan.meals ?? []).map((m: any) => ({
-      id: `m-${m.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
-      time: m.time ?? "",
-      name: m.name ?? "",
-      notes: m.notes,
-      items: (m.items ?? []).map((it: any) => ({
-        tmpId: `it-${it.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
-        foodId: it.foodId ?? it.food?.id,
-        food: it.food,
-        quantity: it.quantity ?? it.quantityGrams ?? 100,
-        unit: it.unit ?? "Gramas",
-        notes: it.notes,
-        substitutes: (it.substitutes ?? []).map((s: any) => ({
-          tmpId: `sub-${s.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
-          foodId: s.foodId ?? s.food?.id,
-          food: s.food,
-          quantity: s.quantity ?? 100,
-          unit: s.unit ?? "Gramas",
-        })),
-      })),
-    }));
+    const draftMeals = toMealDrafts(plan.meals ?? []);
     setMeals(draftMeals);
     setEditingPlanId(plan.id);
     if (draftMeals[0]) setActiveMeal(draftMeals[0].id);
@@ -723,6 +878,9 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
     }
   }
 
+  // O histórico exibe só planos publicados — o rascunho do autosave fica no builder.
+  const publishedMealHistory = history.filter((h) => h.publishedAt);
+
   const openPdf = async (plan: any) => {
     if (!accessToken) return;
     setStatus("Gerando PDF…");
@@ -766,6 +924,17 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
           {editingPlanId && (
             <Button variant="secondary" onClick={cancelEdit} style={{ height: 44 }}>Cancelar edição</Button>
           )}
+          <span style={{ fontSize: "var(--fs-body-sm)", color: autosave.error ? "var(--danger)" : "var(--text-tertiary)" }} title="O rascunho é salvo sozinho a cada alteração; a publicação é manual.">
+            {editingPlanId
+              ? "💾 Rascunho local salvo automaticamente neste navegador"
+              : autosave.error
+                ? `⚠️ ${autosave.error}`
+                : autosave.saving
+                  ? "☁️ Salvando rascunho…"
+                  : autosave.savedAt
+                    ? `☁️ Rascunho salvo às ${new Date(autosave.savedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} — publique quando estiver pronto`
+                    : "☁️ Preencha para iniciar o salvamento automático"}
+          </span>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
           <div style={{ flex: 1, minWidth: 220 }}>
@@ -804,11 +973,11 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
               <span style={{ fontSize: "var(--fs-caption)", opacity: 0.7 }}>{meal.items.length} itens</span>
             </button>
           ))}
-          {history.length > 0 && (
+          {publishedMealHistory.length > 0 && (
             <Card style={{ padding: "var(--sp-4)" }}>
-              <h5 style={{ margin: "0 0 8px" }}>Histórico ({history.length})</h5>
+              <h5 style={{ margin: "0 0 8px" }}>Histórico ({publishedMealHistory.length})</h5>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflow: "auto" }}>
-                {history.map((h) => (
+                {publishedMealHistory.map((h) => (
                   <div key={h.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--bg-base)", borderRadius: 8, flexWrap: "wrap" }}>
                     {editingTitleId === h.id ? (
                       <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ flex: "1 1 100%", background: "var(--bg-surface)", border: "1px solid var(--border-hairline)", color: "var(--text-primary)", borderRadius: 6, padding: "4px 8px" }} />
@@ -847,7 +1016,11 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
                   <Button variant="secondary" onClick={() => moveMeal(meal.id, -1)} style={{ height: 36 }}>↑</Button>
                   <Button variant="secondary" onClick={() => moveMeal(meal.id, 1)} style={{ height: 36 }}>↓</Button>
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <Button variant="secondary" onClick={() => copyMeal(meal.id)} title="Copia os itens desta refeição para colar em outra">⧉ Copiar itens</Button>
+                  {copiedMeal && copiedMeal.items.length > 0 && (
+                    <Button variant="secondary" onClick={() => pasteMeal(meal.id)} title={`Cola os ${copiedMeal.items.length} itens copiados de "${copiedMeal.name}" nesta refeição`}>Colar {copiedMeal.items.length} de "{copiedMeal.name}"</Button>
+                  )}
                   <Button variant="secondary" onClick={() => removeMeal(meal.id)} style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>Excluir refeição</Button>
                 </div>
 
@@ -899,11 +1072,15 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
                           </select>
                           <span style={{ fontSize: "var(--fs-caption)", color: "var(--accent)", fontWeight: 600, whiteSpace: "nowrap" }}>{kcalForFood(it.food, it.quantity, it.unit)} kcal</span>
                           <div style={{ display: "flex", gap: 4 }}>
+                            <button onClick={() => setObsOpen((p) => ({ ...p, [it.tmpId]: !p[it.tmpId] }))} title={it.notes ? "Editar observação" : "Adicionar observação"} style={{ background: it.notes ? "var(--accent)" : "transparent", border: "1px solid var(--border-hairline)", color: it.notes ? "var(--ink-900)" : "var(--text-secondary)", borderRadius: 6, padding: "4px 6px", cursor: "pointer", fontWeight: 700 }}>🗒</button>
                             <button onClick={() => moveItem(meal.id, it.tmpId, -1)} style={{ background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 6px", cursor: "pointer" }}>↑</button>
                             <button onClick={() => moveItem(meal.id, it.tmpId, 1)} style={{ background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 6px", cursor: "pointer" }}>↓</button>
                             <button onClick={() => removeItem(meal.id, it.tmpId)} style={{ background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>✕</button>
                           </div>
                         </div>
+                        {(obsOpen[it.tmpId] || it.notes) && (
+                          <input value={it.notes ?? ""} onChange={(e) => updateItem(meal.id, it.tmpId, { notes: e.target.value })} placeholder="Observação — ex.: sem açúcar, bem passado…" style={{ background: "var(--bg-base)", border: "1px solid var(--border-hairline)", color: "var(--text-primary)", borderRadius: 8, padding: "8px 10px", width: "100%", fontSize: "var(--fs-body-sm)" }} />
+                        )}
                         {(it.substitutes ?? []).length > 0 && (
                           <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, paddingLeft: 2 }}>
                             ou {(it.substitutes ?? []).map((s: any) => `${s.quantity} ${String(s.unit ?? "").toLowerCase()} de ${s.food.name}`).join(" ou ")}
@@ -964,6 +1141,19 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
 
 // ---- TAB: PLANO DE TREINO ----
 type WorkoutExerciseDraft = { tmpId: string; exerciseId: string; exercise: ExerciseItem; sets: number; reps: string; load: string; restSeconds: string; notes: string };
+/** Converte exercícios vindos da API (treino, rascunho ou backup local) em drafts do builder. */
+function toWorkoutDrafts(src: any[]): WorkoutExerciseDraft[] {
+  return (src ?? []).map((ex: any) => ({
+    tmpId: `ex-${ex.tmpId ?? ex.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
+    exerciseId: ex.exerciseId ?? ex.exercise?.id,
+    exercise: ex.exerciseSnapshot ?? ex.exercise,
+    sets: ex.sets ?? 3,
+    reps: ex.reps ?? "12",
+    load: ex.load ?? "",
+    restSeconds: ex.restSeconds != null ? String(ex.restSeconds) : "60",
+    notes: ex.notes ?? "",
+  }));
+}
 function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished: () => void }) {
   const { accessToken } = useAuth();
   const [letter, setLetter] = useState("A");
@@ -984,12 +1174,99 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
   const [templateTitle, setTemplateTitle] = useState("");
   const [libraryStatus, setLibraryStatus] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  // Salvamento automático: rascunho no servidor (invisível p/ cliente) + cópia local.
+  const [workoutDraftId, setWorkoutDraftId] = useState<string | null>(null);
+  const [autosave, setAutosave] = useState<{ saving: boolean; savedAt: number | null; error: string | null }>({ saving: false, savedAt: null, error: null });
+  const lastSavedJson = useRef("");
+  const readyRef = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const workoutBackupKey = (l: string) => `couthealth:workout-draft:${clientId}:${l}`;
 
   useEffect(() => {
     exercisesApi.muscleGroups().then(setGroups);
-    refreshHistory();
     refreshTemplates();
+    (async () => {
+      if (!accessToken) return;
+      let hist: any[] = [];
+      try {
+        hist = await adminApi.listWorkouts(clientId, accessToken);
+        setHistory(hist);
+      } catch {}
+      await loadLetterDraft("A", hist);
+      readyRef.current = true;
+    })();
   }, []);
+  /** Carrega builder da letra: backup local mais novo > rascunho do servidor > vazio. */
+  async function loadLetterDraft(l: string, hist?: any[]) {
+    if (!accessToken) return;
+    const list = hist ?? history;
+    let draft: any = null;
+    try {
+      draft = await adminApi.workoutDraft(clientId, l, accessToken);
+    } catch {}
+    let backup: any = null;
+    try {
+      backup = JSON.parse(localStorage.getItem(workoutBackupKey(l)) ?? "null");
+    } catch {}
+    if (backup?.kind === "edit" && backup.workoutId) {
+      const w = list.find((x: any) => x.id === backup.workoutId);
+      if (w && (backup.exercises ?? []).length > 0) {
+        setLetter(w.letter ?? l);
+        setExercises(toWorkoutDrafts(backup.exercises));
+        setEditingWorkoutId(w.id);
+        setStatus("Edição anterior restaurada do salvamento automático — revise e salve.");
+        return;
+      }
+    }
+    if (backup?.kind === "new" && (backup.exercises ?? []).length > 0) {
+      const draftTime = draft ? new Date(draft.createdAt).getTime() : 0;
+      if ((backup.savedAt ?? 0) > draftTime) {
+        setExercises(toWorkoutDrafts(backup.exercises));
+        setStatus("Rascunho anterior restaurado do salvamento automático.");
+        return;
+      }
+    }
+    if (draft) {
+      setWorkoutDraftId(draft.id);
+      lastSavedJson.current = JSON.stringify({ letter: l, exercises: draft.exercises });
+      const dx = toWorkoutDrafts(draft.exercises ?? []);
+      if (dx.length > 0) {
+        setExercises(dx);
+        setStatus(`Rascunho do Treino ${l} restaurado — continue de onde parou.`);
+        return;
+      }
+    }
+    setExercises([]);
+  }
+  // Espelho local imediato a cada alteração (protege contra erro/quedas).
+  useEffect(() => {
+    if (!readyRef.current) return;
+    try {
+      localStorage.setItem(workoutBackupKey(letter), JSON.stringify({ kind: editingWorkoutId ? "edit" : "new", workoutId: editingWorkoutId, letter, exercises, savedAt: Date.now() }));
+    } catch {}
+  }, [letter, exercises, editingWorkoutId]);
+  // Autosave no servidor (debounce 1,5s) — só para nova prescrição.
+  useEffect(() => {
+    if (!readyRef.current || editingWorkoutId || !accessToken) return;
+    if (exercises.length === 0) return;
+    const snapshot = JSON.stringify({ letter, exercises: buildExercisesPayload() });
+    if (snapshot === lastSavedJson.current) return;
+    setAutosave((a) => ({ ...a, saving: true, error: null }));
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        const saved = await adminApi.saveWorkoutDraft(clientId, JSON.parse(snapshot), accessToken);
+        setWorkoutDraftId(saved.id);
+        lastSavedJson.current = snapshot;
+        setAutosave({ saving: false, savedAt: Date.now(), error: null });
+      } catch {
+        setAutosave({ saving: false, savedAt: null, error: "Falha no salvamento automático — seu rascunho local está guardado neste navegador." });
+      }
+    }, 1500);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [letter, exercises, editingWorkoutId]);
   async function refreshHistory() {
     if (!accessToken) return;
     try {
@@ -1013,23 +1290,64 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
     return exercises.map((e, i) => ({ exerciseId: e.exerciseId, sets: e.sets, reps: e.reps, load: e.load, restSeconds: e.restSeconds ? Number(e.restSeconds) : undefined, notes: e.notes, order: i }));
   }
 
+  /** Garante que o rascunho do servidor está atualizado (usado antes de publicar/trocar de letra). */
+  async function persistWorkoutDraftNow(letterArg = letter, exercisesArg = exercises): Promise<string | null> {
+    if (!accessToken || editingWorkoutId || exercisesArg.length === 0) return workoutDraftId;
+    const payload = { letter: letterArg, exercises: exercisesArg.map((e, i) => ({ exerciseId: e.exerciseId, sets: e.sets, reps: e.reps, load: e.load, restSeconds: e.restSeconds ? Number(e.restSeconds) : undefined, notes: e.notes, order: i })) };
+    const snapshot = JSON.stringify(payload);
+    if (snapshot === lastSavedJson.current && workoutDraftId) return workoutDraftId;
+    setAutosave((a) => ({ ...a, saving: true, error: null }));
+    const saved = await adminApi.saveWorkoutDraft(clientId, payload, accessToken);
+    setWorkoutDraftId(saved.id);
+    lastSavedJson.current = snapshot;
+    setAutosave({ saving: false, savedAt: Date.now(), error: null });
+    return saved.id;
+  }
+
+  /** Troca de letra com flush do rascunho atual antes de carregar o destino. */
+  async function switchLetter(l: string) {
+    if (l === letter) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    try {
+      await persistWorkoutDraftNow();
+    } catch {}
+    setWorkoutDraftId(null);
+    lastSavedJson.current = "";
+    setEditingWorkoutId(null);
+    setStatus(null);
+    setLetter(l);
+    setActiveLetterView(null);
+    await loadLetterDraft(l);
+  }
+
   async function publish() {
     if (!accessToken || exercises.length === 0) {
       setStatus("Adicione ao menos um exercício.");
       return;
     }
-    setStatus(editingWorkoutId ? "Salvando alterações…" : "Publicando…");
     try {
       if (editingWorkoutId) {
+        setStatus("Salvando alterações…");
         await adminApi.updateWorkout(editingWorkoutId, { letter, exercises: buildExercisesPayload() }, accessToken);
         setStatus(`Alterações do Treino ${letter} salvas! Cliente notificado.`);
         setEditingWorkoutId(null);
       } else {
-        const workout = await adminApi.createWorkout(clientId, { letter, exercises: buildExercisesPayload() }, accessToken);
-        await adminApi.publishWorkout(workout.id, accessToken);
+        // Publicação manual: garante o autosave e publica o rascunho.
+        setStatus("Salvando e publicando…");
+        let workoutId: string = (await persistWorkoutDraftNow()) ?? "";
+        if (!workoutId) {
+          const workout = await adminApi.createWorkout(clientId, { letter, exercises: buildExercisesPayload() }, accessToken);
+          workoutId = workout.id;
+        }
+        await adminApi.publishWorkout(workoutId, accessToken);
         setStatus(`Treino ${letter} publicado!`);
+        setWorkoutDraftId(null);
+        lastSavedJson.current = "";
       }
       setExercises([]);
+      try {
+        localStorage.removeItem(workoutBackupKey(letter));
+      } catch {}
       refreshHistory();
       onPublished();
     } catch (err) {
@@ -1040,18 +1358,7 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
   /** Carrega um treino do histórico no builder para editar o conteúdo já lançado. */
   function loadWorkoutForEdit(w: any) {
     setLetter(w.letter ?? "A");
-    setExercises(
-      (w.exercises ?? []).map((ex: any) => ({
-        tmpId: `ex-${ex.id ?? Date.now()}-${Math.random().toString(36).slice(2)}`,
-        exerciseId: ex.exerciseId ?? ex.exercise?.id,
-        exercise: ex.exercise,
-        sets: ex.sets ?? 3,
-        reps: ex.reps ?? "12",
-        load: ex.load ?? "",
-        restSeconds: ex.restSeconds != null ? String(ex.restSeconds) : "60",
-        notes: ex.notes ?? "",
-      }))
-    );
+    setExercises(toWorkoutDrafts(w.exercises ?? []));
     setEditingWorkoutId(w.id);
     setStatus(`Editando "${w.title ?? `Treino ${w.letter}`} ". Ajuste e salve as alterações.`);
   }
@@ -1172,15 +1479,17 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
     }
   };
 
+  // O histórico exibe só treinos publicados — o rascunho do autosave fica no builder.
+  const publishedWorkoutHistory = history.filter((w: any) => w.publishedAt);
   const grouped = useMemo(() => {
     const g: Record<string, any[]> = {};
-    for (const w of history) {
+    for (const w of publishedWorkoutHistory) {
       const k = w.letter;
       if (!g[k]) g[k] = [];
       g[k].push(w);
     }
     return g;
-  }, [history]);
+  }, [publishedWorkoutHistory]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-6)" }}>
@@ -1190,7 +1499,7 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
             <label style={{ display: "block", fontSize: "var(--fs-caption)", color: "var(--text-tertiary)", marginBottom: 6 }}>Treino</label>
             <div style={{ display: "flex", gap: 6 }}>
               {letters.map((l) => (
-                <button key={l} onClick={() => setLetter(l)} style={{ width: 44, height: 44, borderRadius: 10, border: "1px solid var(--border-hairline)", background: letter === l ? "var(--accent)" : "var(--bg-surface)", color: letter === l ? "var(--ink-900)" : "var(--text-primary)", fontWeight: 700, cursor: "pointer" }}>{l}</button>
+                <button key={l} onClick={() => switchLetter(l)} style={{ width: 44, height: 44, borderRadius: 10, border: "1px solid var(--border-hairline)", background: letter === l ? "var(--accent)" : "var(--bg-surface)", color: letter === l ? "var(--ink-900)" : "var(--text-primary)", fontWeight: 700, cursor: "pointer" }}>{l}</button>
               ))}
             </div>
           </div>
@@ -1217,6 +1526,17 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
             <Button variant="secondary" onClick={cancelEdit} style={{ height: 44 }}>Cancelar edição</Button>
           )}
           {status && <span style={{ color: status.includes("publicado") || status.includes("salvas") ? "var(--success)" : "var(--danger)", fontSize: "var(--fs-body-sm)" }}>{status}</span>}
+          <span style={{ fontSize: "var(--fs-body-sm)", color: autosave.error ? "var(--danger)" : "var(--text-tertiary)" }} title="O rascunho é salvo sozinho a cada alteração; a publicação é manual.">
+            {editingWorkoutId
+              ? "💾 Rascunho local salvo automaticamente neste navegador"
+              : autosave.error
+                ? `⚠️ ${autosave.error}`
+                : autosave.saving
+                  ? "☁️ Salvando rascunho…"
+                  : autosave.savedAt
+                    ? `☁️ Rascunho salvo às ${new Date(autosave.savedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} — publique quando estiver pronto`
+                    : "☁️ Preencha para iniciar o salvamento automático"}
+          </span>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
           <div style={{ flex: 1, minWidth: 220 }}>

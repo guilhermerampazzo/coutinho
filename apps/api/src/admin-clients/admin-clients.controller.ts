@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { ProfessionalGuard } from "../auth/professional.guard";
 import { AdminClientsService } from "./admin-clients.service";
 import { CreateMealPlanDto } from "./dto/meal-plan.dto";
@@ -115,6 +115,29 @@ export class AdminClientsController {
   @Delete("workouts/:id")
   removeWorkout(@Param("id") id: string, @Req() req: any) {
     return this.service.removeWorkout(id, req.user.userId);
+  }
+
+  // ---- Rascunhos com salvamento automático (prescrição) ----
+  // Planos/treinos NÃO publicados: invisíveis para o cliente. A publicação
+  // continua manual, pelos endpoints de publish já existentes.
+  @Get("clients/:id/meal-plan-draft")
+  getMealPlanDraft(@Param("id") id: string) {
+    return this.service.getMealPlanDraft(id);
+  }
+
+  @Put("clients/:id/meal-plan-draft")
+  saveMealPlanDraft(@Param("id") id: string, @Body() dto: CreateMealPlanDto) {
+    return this.service.saveMealPlanDraft(id, dto);
+  }
+
+  @Get("clients/:id/workout-draft")
+  getWorkoutDraft(@Param("id") id: string, @Query("letter") letter: string) {
+    return this.service.getWorkoutDraft(id, letter ?? "A");
+  }
+
+  @Put("clients/:id/workout-draft")
+  saveWorkoutDraft(@Param("id") id: string, @Body() dto: CreateWorkoutDto) {
+    return this.service.saveWorkoutDraft(id, dto);
   }
 
   // ---- Biblioteca de planos prontos (templates reutilizáveis) ----

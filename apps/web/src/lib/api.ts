@@ -239,6 +239,11 @@ export const adminApi = {
   /** Remove um plano alimentar já lançado do histórico do cliente. */
   removeMealPlan: (mealPlanId: string, token: string) =>
     request<{ ok: boolean }>(`/admin/meal-plans/${mealPlanId}`, { method: "DELETE" }, token),
+  /** Rascunho alimentar (não publicado, invisível p/ cliente) — salvamento automático. */
+  mealPlanDraft: (clientId: string, token: string) =>
+    request<any | null>(`/admin/clients/${clientId}/meal-plan-draft`, {}, token),
+  saveMealPlanDraft: (clientId: string, data: { title?: string; meals: any[] }, token: string) =>
+    request<any>(`/admin/clients/${clientId}/meal-plan-draft`, { method: "PUT", body: JSON.stringify(data) }, token),
   // Treino — Treino A/B/C/D clicáveis com histórico e título
   createWorkout: (clientId: string, data: { letter: string; title?: string; exercises: any[] }, token: string) =>
     request<any>(`/admin/clients/${clientId}/workout`, { method: "POST", body: JSON.stringify(data) }, token),
@@ -253,6 +258,11 @@ export const adminApi = {
   /** Remove um treino já lançado do histórico do cliente. */
   removeWorkout: (workoutId: string, token: string) =>
     request<{ ok: boolean }>(`/admin/workouts/${workoutId}`, { method: "DELETE" }, token),
+  /** Rascunho de treino (não publicado, invisível p/ cliente) — salvamento automático. */
+  workoutDraft: (clientId: string, letter: string, token: string) =>
+    request<any | null>(`/admin/clients/${clientId}/workout-draft?letter=${encodeURIComponent(letter)}`, {}, token),
+  saveWorkoutDraft: (clientId: string, data: { letter: string; title?: string; exercises: any[] }, token: string) =>
+    request<any>(`/admin/clients/${clientId}/workout-draft`, { method: "PUT", body: JSON.stringify(data) }, token),
   clientMessages: (clientId: string, token: string) => request<any>(`/admin/clients/${clientId}/messages`, {}, token),
   replyToClient: (clientId: string, body: string, token: string) =>
     request<any>(`/admin/clients/${clientId}/messages`, { method: "POST", body: JSON.stringify({ body }) }, token),
