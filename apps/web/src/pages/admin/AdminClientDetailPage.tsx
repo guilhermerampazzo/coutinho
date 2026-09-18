@@ -903,7 +903,7 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
         <div style={{ display: "flex", gap: "var(--sp-3)", alignItems: "end", flexWrap: "wrap" }}>
           <TextField label="Título do plano" value={title} onChange={(e) => setTitle(e.target.value)} style={{ flex: 2, minWidth: 240 }} />
           <div style={{ flex: 1, minWidth: 220 }}>
-            <label style={{ display: "block", fontSize: "var(--fs-caption)", color: "var(--text-tertiary)", marginBottom: 6 }}>📚 Biblioteca de Dietas</label>
+            <label style={{ display: "block", fontSize: "var(--fs-caption)", color: "var(--text-tertiary)", marginBottom: 6 }}>Biblioteca de Dietas</label>
             <select
               value={selectedTemplateId}
               onChange={(e) => {
@@ -926,14 +926,14 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
           )}
           <span style={{ fontSize: "var(--fs-body-sm)", color: autosave.error ? "var(--danger)" : "var(--text-tertiary)" }} title="O rascunho é salvo sozinho a cada alteração; a publicação é manual.">
             {editingPlanId
-              ? "💾 Rascunho local salvo automaticamente neste navegador"
+              ? "Rascunho local salvo automaticamente neste navegador"
               : autosave.error
-                ? `⚠️ ${autosave.error}`
+                ? `${autosave.error}`
                 : autosave.saving
-                  ? "☁️ Salvando rascunho…"
+                  ? "Salvando rascunho…"
                   : autosave.savedAt
-                    ? `☁️ Rascunho salvo às ${new Date(autosave.savedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} — publique quando estiver pronto`
-                    : "☁️ Preencha para iniciar o salvamento automático"}
+                    ? `Rascunho salvo às ${new Date(autosave.savedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} — publique quando estiver pronto`
+                    : "Preencha para iniciar o salvamento automático"}
           </span>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
@@ -947,7 +947,7 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
         </div>
         {editingPlanId && (
           <p style={{ color: "var(--accent)", fontSize: "var(--fs-body-sm)", margin: 0, fontWeight: 600 }}>
-            ✏️ Editando plano já lançado — ao salvar, o cliente recebe a versão atualizada.
+            Editando plano já lançado — ao salvar, o cliente recebe a versão atualizada.
           </p>
         )}
         {libraryStatus && <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{libraryStatus}</p>}
@@ -1017,7 +1017,7 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
                   <Button variant="secondary" onClick={() => moveMeal(meal.id, 1)} style={{ height: 36 }}>↓</Button>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Button variant="secondary" onClick={() => copyMeal(meal.id)} title="Copia os itens desta refeição para colar em outra">⧉ Copiar itens</Button>
+                  <Button variant="secondary" onClick={() => copyMeal(meal.id)} title="Copia os itens desta refeição para colar em outra">Copiar itens</Button>
                   {copiedMeal && copiedMeal.items.length > 0 && (
                     <Button variant="secondary" onClick={() => pasteMeal(meal.id)} title={`Cola os ${copiedMeal.items.length} itens copiados de "${copiedMeal.name}" nesta refeição`}>Colar {copiedMeal.items.length} de "{copiedMeal.name}"</Button>
                   )}
@@ -1072,7 +1072,7 @@ function NutritionTab({ clientId, onPublished }: { clientId: string; onPublished
                           </select>
                           <span style={{ fontSize: "var(--fs-caption)", color: "var(--accent)", fontWeight: 600, whiteSpace: "nowrap" }}>{kcalForFood(it.food, it.quantity, it.unit)} kcal</span>
                           <div style={{ display: "flex", gap: 4 }}>
-                            <button onClick={() => setObsOpen((p) => ({ ...p, [it.tmpId]: !p[it.tmpId] }))} title={it.notes ? "Editar observação" : "Adicionar observação"} style={{ background: it.notes ? "var(--accent)" : "transparent", border: "1px solid var(--border-hairline)", color: it.notes ? "var(--ink-900)" : "var(--text-secondary)", borderRadius: 6, padding: "4px 6px", cursor: "pointer", fontWeight: 700 }}>🗒</button>
+                            <button onClick={() => setObsOpen((p) => ({ ...p, [it.tmpId]: !p[it.tmpId] }))} title={it.notes ? "Editar observação" : "Adicionar observação"} style={{ background: it.notes ? "var(--accent)" : "transparent", border: "1px solid var(--border-hairline)", color: it.notes ? "var(--ink-900)" : "var(--text-secondary)", borderRadius: 6, padding: "4px 6px", cursor: "pointer", fontWeight: 700, fontSize: 11 }}>Obs</button>
                             <button onClick={() => moveItem(meal.id, it.tmpId, -1)} style={{ background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 6px", cursor: "pointer" }}>↑</button>
                             <button onClick={() => moveItem(meal.id, it.tmpId, 1)} style={{ background: "transparent", border: "1px solid var(--border-hairline)", color: "var(--text-secondary)", borderRadius: 6, padding: "4px 6px", cursor: "pointer" }}>↓</button>
                             <button onClick={() => removeItem(meal.id, it.tmpId)} style={{ background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>✕</button>
@@ -1504,7 +1504,7 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
             </div>
           </div>
           <div style={{ flex: 1, minWidth: 220 }}>
-            <label style={{ display: "block", fontSize: "var(--fs-caption)", color: "var(--text-tertiary)", marginBottom: 6 }}>📚 Biblioteca de Treinos</label>
+            <label style={{ display: "block", fontSize: "var(--fs-caption)", color: "var(--text-tertiary)", marginBottom: 6 }}>Biblioteca de Treinos</label>
             <select
               value={selectedTemplateId}
               onChange={(e) => {
@@ -1528,14 +1528,14 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
           {status && <span style={{ color: status.includes("publicado") || status.includes("salvas") ? "var(--success)" : "var(--danger)", fontSize: "var(--fs-body-sm)" }}>{status}</span>}
           <span style={{ fontSize: "var(--fs-body-sm)", color: autosave.error ? "var(--danger)" : "var(--text-tertiary)" }} title="O rascunho é salvo sozinho a cada alteração; a publicação é manual.">
             {editingWorkoutId
-              ? "💾 Rascunho local salvo automaticamente neste navegador"
+              ? "Rascunho local salvo automaticamente neste navegador"
               : autosave.error
-                ? `⚠️ ${autosave.error}`
+                ? `${autosave.error}`
                 : autosave.saving
-                  ? "☁️ Salvando rascunho…"
+                  ? "Salvando rascunho…"
                   : autosave.savedAt
-                    ? `☁️ Rascunho salvo às ${new Date(autosave.savedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} — publique quando estiver pronto`
-                    : "☁️ Preencha para iniciar o salvamento automático"}
+                    ? `Rascunho salvo às ${new Date(autosave.savedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} — publique quando estiver pronto`
+                    : "Preencha para iniciar o salvamento automático"}
           </span>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
@@ -1550,7 +1550,7 @@ function TrainingTab({ clientId, onPublished }: { clientId: string; onPublished:
         {libraryStatus && <p style={{ color: "var(--text-secondary)", fontSize: "var(--fs-body-sm)", margin: 0 }}>{libraryStatus}</p>}
         {editingWorkoutId && (
           <p style={{ color: "var(--accent)", fontSize: "var(--fs-body-sm)", margin: 0, fontWeight: 600 }}>
-            ✏️ Editando treino já lançado — ao salvar, o cliente recebe a versão atualizada.
+            Editando treino já lançado — ao salvar, o cliente recebe a versão atualizada.
           </p>
         )}
       </Card>
